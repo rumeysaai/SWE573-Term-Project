@@ -1,2 +1,3 @@
 # SWE-573
-SWE 573 Term Project 
+
+This repository has been created for the SWE 573 Term Project
