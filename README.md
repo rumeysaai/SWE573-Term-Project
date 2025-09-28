@@ -10,3 +10,5 @@ This repository has been created for the SWE 573 Term Project
 ## Contributors
 - Rumeysa Akgün İleri  
 - uskudarli (as collaborator)
+
+## Requirements
