@@ -34,4 +34,14 @@ This repository has been created for the SWE 573 Term Project
 - Should there be community events (like group projects or workshops) that members can join to get extra credit or just join with a credit?
 - Should users verify their identity via email or phone while they are signing up?(Yes)
 - Should the system send email/notification to suggest nearby offers through past activities of users?
+### Non-Functional Requirements
+- Should the platform have a responsive front-end design?
+- Should the user interface be built with React for dynamic rendering?
+- How should be the interface (minimalist, user friendly) ?
+- How many concurrent users should platform be able to handle?
+- Should the database be indexed by tags and location to support fast queries?
+- Should all communication be secured via HTTPS?
+- Should user passwords be hashed before storage?
+- Should map services integrate with OpenStreetMap or Google Maps API?
+
 
