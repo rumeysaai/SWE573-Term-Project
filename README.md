@@ -17,7 +17,7 @@ This repository has been created for the SWE 573 Term Project
 - Should users be able to create, edit, and delete their own service posts?
 - Should there be a notification system that alerts users when someone interacts with their post?
 - Should users be able to favorite offers or needs they are interested in?
-- Should there be any limit on locations to interact with posts?
+- Should each user see their own neighborhood and there be any limit on locations to interact with posts?
 - Should there be a chat interface showing message history between two users? (Yes, direct messages may be)
 - Should the platform allow blocking or reporting of other users for inappropriate behavior?
 - Should the system assign each user a TimeBank balance measured in hours? (Yes, also each user should start with some credit for ex 3 hours.)
