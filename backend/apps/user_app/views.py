@@ -10,9 +10,10 @@ class UserSignupView(generics.CreateAPIView):
     """
     Yeni kullanıcı kaydı için POST endpoint'i.
     """
+
     queryset = User.objects.all()
     serializer_class = UserSignupSerializer
-    permission_classes = (permissions.AllowAny,) # Giriş yapmaya gerek yok
+    permission_classes = (permissions.AllowAny,)  # Giriş yapmaya gerek yok
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -21,22 +22,28 @@ class UserSignupView(generics.CreateAPIView):
             self.perform_create(serializer)
             # FR-19: Email doğrulama sonrası TimeBank bakiyesi otomatik atanır (Model'de varsayılan 3.00)
             return Response(
-                {"message": "Account created successfully. Please check your email for verification."},
-                status=status.HTTP_201_CREATED
+                {
+                    "message": "Account created successfully. Please check your email for verification."
+                },
+                status=status.HTTP_201_CREATED,
             )
         except IntegrityError:
-             return Response(
+            return Response(
                 {"error": "Bu e-posta adresi zaten kayıtlı."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
 
 # Profil Ekranı API'si (Sadece okuma ve kendi profilini düzenleme)
 class UserProfileView(generics.RetrieveUpdateAPIView):
     """
     Giriş yapmış kullanıcının kendi profilini görüntülemesi ve düzenlemesi.
     """
+
     serializer_class = UserProfileSerializer
-    permission_classes = (permissions.IsAuthenticated,) # Sadece giriş yapanlar erişebilir
+    permission_classes = (
+        permissions.IsAuthenticated,
+    )  # Sadece giriş yapanlar erişebilir
 
     def get_object(self):
         # Giriş yapmış kullanıcının nesnesini döndürür
