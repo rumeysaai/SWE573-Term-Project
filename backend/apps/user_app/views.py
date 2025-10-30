@@ -5,7 +5,7 @@ from .serializers import UserSignupSerializer, UserProfileSerializer
 from .models import User
 from django.db import IntegrityError
 
-# Kayıt Ekranı API'si
+
 class UserSignupView(generics.CreateAPIView):
     """
     Yeni kullanıcı kaydı için POST endpoint'i.

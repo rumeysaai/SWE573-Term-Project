@@ -1,8 +1,6 @@
-# users/serializers.py
-
 from rest_framework import serializers
-from .models import User, Category # Category'yi import et
-from timebank_app.models import Rating # Rating'i timebank app'ten import et
+from .models import User, Category 
+from timebank_app.models import Rating
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
