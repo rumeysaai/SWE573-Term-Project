@@ -1,0 +1,13 @@
+# macOS specific files
+.DS_Store
+
+# Virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Django/DRF specific
+*.log
+.env
