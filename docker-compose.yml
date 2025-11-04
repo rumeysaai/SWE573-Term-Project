@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Veritabanı Servisi (PostgreSQL)
+  db:
+    image: postgres:14-alpine
+    container_name: postgres_db
+    env_file: .env # .env dosyasından değişkenleri al
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Sadece lokalden db'ye erişmek isterseniz (opsiyonel)
+
+  # Backend Servisi (Django)
+  backend:
+    build: ./backend
+    container_name: django_backend
+    env_file: .env
+    volumes:
+      - ./backend:/app # Kodu konteynere bağla (geliştirme için)
+    ports:
+      - "8000:8000" # Django'ya lokalden erişim (test için)
+    depends_on:
+      - db # Başlamadan önce db'nin hazır olmasını bekle
+    command: >
+      sh -c "python manage.py migrate &&
+             gunicorn the_hive.wsgi:application --bind 0.0.0.0:8000"
+
+  # Frontend Servisi (React + Nginx)
+  frontend:
+    build: ./frontend
+    container_name: react_frontend
+    ports:
+      - "3000:80" # Lokal port 3000'i Nginx'in 80 portuna bağla
+    depends_on:
+      - backend # Başlamadan önce backend'in hazır olmasını bekle
+
+volumes:
+  postgres_data: # Veritabanı verilerini kalıcı hale getir
