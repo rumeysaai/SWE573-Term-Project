@@ -15,6 +15,65 @@ DEBUG = os.environ.get('DEBUG', '0') == '1'
 ALLOWED_HOSTS = ['backend', 'localhost', '127.0.0.1']
 
 # ... (INSTALLED_APPS vb.) ...
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    # third-party libraries
+    'rest_framework',
+    'corsheaders',
+    # uygulama (app)
+    # Model ve serializer
+    'api',
+]
+# MIDDLEWARE
+# Gelen isteklere ve giden yanıtlara müdahale eden katmanlar.
+# Admin paneli (ve CORS) için zorunludur.
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    
+    # HINT'in belirttiği gibi 'AuthenticationMiddleware'den önce olmalı
+    'django.contrib.sessions.middleware.SessionMiddleware', 
+    
+    # CORS (React'ten gelen istekler için)
+    'corsheaders.middleware.CorsMiddleware', 
+    
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    
+    # Admin paneli için zorunlu
+    'django.contrib.auth.middleware.AuthenticationMiddleware', 
+    
+    # Admin paneli için zorunlu
+    'django.contrib.messages.middleware.MessageMiddleware', 
+    
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+
+# TEMPLATES
+# Admin panelinin (admin.E403 hatası) çalışması için zorunlu.
+# 'APP_DIRS': True ayarı, Django'ya admin panelinin kendi HTML
+# dosyalarını bulmasını söyler.
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
 
 # VERİTABANI Ayarları (.env'den okuyacak şekilde)
 DATABASES = {
