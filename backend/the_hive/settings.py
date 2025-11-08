@@ -22,12 +22,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # third-party libraries
     'rest_framework',
     'corsheaders',
-    # uygulama (app)
-    # Model ve serializer
     'api',
+    'django_filters',
 ]
 # MIDDLEWARE
 # Gelen isteklere ve giden yanıtlara müdahale eden katmanlar.
@@ -85,6 +83,12 @@ DATABASES = {
         'HOST': 'db', # docker-compose'daki servis adı
         'PORT': 5432,
     }
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend'
+    ]
 }
 
 # CORS ayarını da güncelleyelim (Sadece debug ise localhost'a izin ver)

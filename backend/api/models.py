@@ -1,8 +1,55 @@
 from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
-class Task(models.Model):
+# Kullanıcının avatarı ve zaman bankası bakiyesini tutacak model
+class Profile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    avatar = models.URLField(max_length=500, blank=True, null=True, default="https://placehold.co/100x100/EBF8FF/3B82F6?text=User")
+    timebank_balance = models.FloatField(default=0.0)
+
+    def __str__(self):
+        return self.user.username
+
+# Yeni bir User oluşturulduğunda, otomatik olarak bir Profile oluştur
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
+
+# Tag (Etiket) modeli
+class Tag(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+# Ana İlan (Post) modeli
+class Post(models.Model):
+    TYPE_CHOICES = [
+        ('offer', 'Offer'), # Teklif
+        ('need', 'Need'),   # İhtiyaç
+    ]
+
     title = models.CharField(max_length=200)
-    completed = models.BooleanField(default=False)
+    description = models.TextField()
+    
+    # İlişkiler
+    posted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="posts")
+    tags = models.ManyToManyField(Tag, blank=True)
+
+    # İlan Detayları
+    post_type = models.CharField(max_length=5, choices=TYPE_CHOICES, default='offer')
+    location = models.CharField(max_length=200)
+    duration = models.CharField(max_length=100) # "3-4 saat", "Esnek" gibi
+    
+    # Otomatik Tarihler
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at'] # En yeniden eskiye sırala
 
     def __str__(self):
         return self.title
