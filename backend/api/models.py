@@ -3,16 +3,16 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-# Kullanıcının avatarı ve zaman bankası bakiyesini tutacak model
 class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     avatar = models.URLField(max_length=500, blank=True, null=True, default="https://placehold.co/100x100/EBF8FF/3B82F6?text=User")
-    timebank_balance = models.FloatField(default=0.0)
+    time_balance = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
 
     def __str__(self):
-        return self.user.username
+        return f"{self.user.username}'s Profile"
 
-# Yeni bir User oluşturulduğunda, otomatik olarak bir Profile oluştur
+# ❗ ÖNEMLİ: Sinyal
+# Yeni bir User (kullanıcı) oluşturulduğu an bu fonksiyon tetiklenir
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:

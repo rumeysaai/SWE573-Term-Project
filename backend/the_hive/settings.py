@@ -91,14 +91,35 @@ REST_FRAMEWORK = {
     ]
 }
 
+
 # CORS ayarını da güncelleyelim (Sadece debug ise localhost'a izin ver)
 if DEBUG:
     CORS_ALLOWED_ORIGINS = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
-else:
-    # Prodüksiyon için buraya Vercel/Sunucu adresinizi eklersiniz
-    CORS_ALLOWED_ORIGINS = [
-        "https://sizin-domaininiz.com",
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ]
+else:
+    CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+# React'in cookie göndermesine izin ver
+CORS_ALLOW_CREDENTIALS = True 
+
+# Cookie'lerin domain'ler arası çalışmasına izin ver (Geliştirme için)
+#CSRF_COOKIE_SAMESITE = 'None'
+#SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# (Prodüksiyona geçerken 'SECURE' True olmalı)
+# CSRF_COOKIE_SECURE = True 
+# SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = False 
+SESSION_COOKIE_SECURE = False
+
+STATIC_URL = 'django-static/'
