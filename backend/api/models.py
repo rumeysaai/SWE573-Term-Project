@@ -44,6 +44,11 @@ class Post(models.Model):
     location = models.CharField(max_length=200)
     duration = models.CharField(max_length=100) # "3-4 saat", "Esnek" gibi
     
+    # Ekstra Detaylar
+    frequency = models.CharField(max_length=50, blank=True, null=True) # "one-time", "weekly", "monthly" gibi
+    participant_count = models.IntegerField(default=1, blank=True, null=True)
+    date = models.DateField(blank=True, null=True) # Servis tarihi
+    
     # Otomatik Tarihler
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

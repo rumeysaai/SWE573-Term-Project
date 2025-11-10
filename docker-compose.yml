@@ -31,9 +31,9 @@ services:
     environment:
       # 3. Django'nun doğru host'a (db) bağlanmasını sağlayın
       DB_HOST: db
-      DB_NAME: ${POSTGRES_DB}
-      DB_USER: ${POSTGRES_USER}
-      DB_PASS: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
     depends_on:
       db:

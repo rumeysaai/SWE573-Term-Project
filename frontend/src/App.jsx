@@ -127,6 +127,14 @@ export default function App() {
             element={<ProtectedRoute><Home /></ProtectedRoute>}
           />
           <Route
+            path="/post/new"
+            element={<ProtectedRoute><Post /></ProtectedRoute>}
+          />
+          <Route
+            path="/post/edit/:id"
+            element={<ProtectedRoute><Post /></ProtectedRoute>}
+          />
+          <Route
             path="/post/:postId"
             element={<ProtectedRoute><Post /></ProtectedRoute>}
           />

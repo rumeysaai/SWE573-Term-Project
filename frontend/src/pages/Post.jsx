@@ -1,88 +1,57 @@
-import React, { useState, useEffect } from "react";
-import api from "../api";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import api from '../api';
+import { useAuth } from '../App';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
+import { 
+  PenLine, 
+  X, 
+  Clock, 
+  Calendar as CalendarIcon, 
+  Users, 
+  RefreshCw,
+  Send,
+  Loader2
+} from 'lucide-react';
+import { toast } from 'sonner';
 import {
-  Clock,
-  Leaf,
-  Loader2,
-  MapPin,
-  Package,
-} from "lucide-react";
-
-// --- PostPage için Gerekli Bileşenler ---
-// Normalde bu bileşenler 'components/ui.jsx' gibi paylaşılan bir dosyada
-// olmalı, ancak isteğiniz üzerine PostPage içinde tanımlanıyorlar.
-
-const Button = ({ children, variant = "default", size = "default", className = "", ...props }) => {
-  const baseClasses = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
-  const variants = {
-    default: "bg-blue-600 text-white hover:bg-blue-600/90 shadow-md",
-    ghost: "hover:bg-gray-100 hover:text-gray-900",
-    outline: "border border-gray-300 bg-transparent hover:bg-gray-50",
-  };
-  const sizes = {
-    default: "h-10 px-4 py-2",
-    lg: "h-11 rounded-md px-8",
-  };
-  return (
-    <button
-      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Input = ({ className = "", ...props }) => (
-  <input
-    className={`flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-    {...props}
-  />
-);
-
-// Yeni Textarea Bileşeni
-const Textarea = ({ className = "", ...props }) => (
-  <textarea
-    className={`flex min-h-[120px] w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-    {...props}
-  />
-);
-
-const Select = ({ children, onValueChange, value, ...props }) => (
-  <select
-    onChange={(e) => onValueChange(e.target.value)}
-    value={value}
-    className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-    {...props}
-  >
-    {children}
-  </select>
-);
-
-const SelectItem = ({ children, value }) => (
-  <option value={value}>{children}</option>
-);
-
-const Separator = () => <hr className="my-6 border-gray-200" />;
-
-// --- Ana PostPage Bileşeni ---
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
 
 export default function Post() {
   const { id } = useParams(); // URL'den /:id'yi alır
   const isEditing = Boolean(id); // ID varsa, düzenleme modundayız
-  const navigate = useNavigate(); // Form gönderildikten sonra yönlendirmek için
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
+  // Backend API'ye uygun state yapısı
   const [post, setPost] = useState({
-    title: "",
-    description: "",
-    post_type: "offer",
-    location: "",
-    duration: "",
-    tags: [] // Backend 'tags' alanı için bir ID listesi bekler.
+    title: '',
+    description: '',
+    post_type: 'offer',
+    location: '',
+    duration: '', // Backend string bekliyor
+    tags: [] // Backend ID listesi bekliyor
   });
-  
+
+  // UI için ekstra state'ler (backend'de yok, sadece UI için)
+  const [estimatedHours, setEstimatedHours] = useState(3);
+  const [date, setDate] = useState('');
+  const [participantCount, setParticipantCount] = useState(1);
+  const [frequency, setFrequency] = useState('one-time');
+  const [isGroupActivity, setIsGroupActivity] = useState(false);
+
   const [allTags, setAllTags] = useState([]); // Tüm etiketleri çekmek için
+  const [selectedTagIds, setSelectedTagIds] = useState([]); // Seçilen tag ID'leri
+  const [tagInput, setTagInput] = useState(''); // Tag input için
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -98,24 +67,30 @@ export default function Post() {
       api.get(`/posts/${id}/`)
         .then(response => {
           // Backend'den gelen veriyi form state'ine set et
-          const { title, description, post_type, location, duration, tags } = response.data;
+          const { title, description, post_type, location, duration, tags, frequency, participant_count, date } = response.data;
           
-          // Backend'den gelen tags listesi string'lerden oluşuyor ("Gardening")
-          // Bizim ise POST/PUT için ID listesine ihtiyacımız var.
-          // Bu örnekte, 'tags' alanını düzenleme için doldurmayı basitleştiriyoruz.
-          // İdeal bir senaryoda, backend'den ID'ler gelmeli veya 
-          // string'leri ID'lere eşleştirmeliyiz.
-          
+          // Tags string array olarak geliyor, önce string olarak sakla
+          // Sonra allTags yüklendiğinde ID'lere çevrilecek
           setPost({ 
             title, 
             description, 
             post_type, 
             location, 
-            duration, 
-            tags: [] // Düzenleme için etiket seçimini şimdilik basitleştiriyoruz
-                     // Backend (PostSerializer) tags alanı read_only olduğu için
-                     // ve string listesi döndürdüğü için.
+            duration,
+            tags: tags // Geçici olarak string array olarak sakla
           });
+          
+          // Duration'dan estimatedHours'ı parse et (örn: "3 hours" -> 3)
+          const hoursMatch = duration.match(/(\d+)/);
+          if (hoursMatch) {
+            setEstimatedHours(parseInt(hoursMatch[1]));
+          }
+          
+          // Ekstra alanları set et
+          if (frequency) setFrequency(frequency);
+          if (participant_count) setParticipantCount(participant_count);
+          if (date) setDate(date);
+          
           setLoading(false);
         })
         .catch(err => {
@@ -126,56 +101,88 @@ export default function Post() {
     }
   }, [id, isEditing]);
 
-  // Formdaki değişiklikleri state'e kaydet
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setPost(prevPost => ({
-      ...prevPost,
-      [name]: value
+  // allTags yüklendiğinde ve post.tags string array ise, ID'lere çevir
+  useEffect(() => {
+    if (allTags.length > 0 && isEditing && Array.isArray(post.tags) && post.tags.length > 0 && typeof post.tags[0] === 'string') {
+      const tagIds = post.tags.map(tagName => {
+        const tag = allTags.find(t => t.name === tagName);
+        return tag ? tag.id : null;
+      }).filter(id => id !== null);
+      
+      setSelectedTagIds(tagIds);
+      setPost(prev => ({ ...prev, tags: tagIds }));
+    }
+  }, [allTags, isEditing, post.tags]);
+
+  // Tag ekleme (Input'tan tag ekleme)
+  const handleAddTag = async () => {
+    if (tagInput.trim()) {
+      // Önce mevcut tag'lerde var mı kontrol et
+      const existingTag = allTags.find(t => t.name.toLowerCase() === tagInput.trim().toLowerCase());
+      
+      if (existingTag) {
+        // Tag zaten varsa, ID'sini ekle
+        if (!selectedTagIds.includes(existingTag.id)) {
+          setSelectedTagIds([...selectedTagIds, existingTag.id]);
+          setPost(prev => ({ ...prev, tags: [...prev.tags, existingTag.id] }));
+        }
+      } else {
+        // Yeni tag oluştur
+        try {
+          const response = await api.post('/tags/', { name: tagInput.trim() });
+          const newTag = response.data;
+          setAllTags([...allTags, newTag]);
+          setSelectedTagIds([...selectedTagIds, newTag.id]);
+          setPost(prev => ({ ...prev, tags: [...prev.tags, newTag.id] }));
+        } catch (err) {
+          console.error("Tag oluşturulamadı:", err);
+          toast.error('Tag oluşturulamadı. Lütfen tekrar deneyin.');
+        }
+      }
+      setTagInput('');
+    }
+  };
+
+  // Tag kaldırma
+  const handleRemoveTag = (tagIdToRemove) => {
+    setSelectedTagIds(selectedTagIds.filter(id => id !== tagIdToRemove));
+    setPost(prev => ({ 
+      ...prev, 
+      tags: prev.tags.filter(id => id !== tagIdToRemove) 
     }));
   };
 
-  // Etiket seçimi (Çoklu seçim)
-  const handleTagChange = (e) => {
-    // Seçilen option'lardan value'larını (ID) al ve bir diziye dönüştür
-    const selectedOptions = Array.from(e.target.selectedOptions, option => parseInt(option.value));
-    setPost(prevPost => ({
-      ...prevPost,
-      tags: selectedOptions
-    }));
-  };
-  
   // Formu gönder (Oluştur veya Güncelle)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
+    // estimatedHours'ı duration string'ine çevir
+    const durationString = `${estimatedHours} hours`;
+
     const dataToSend = {
       title: post.title,
       description: post.description,
       post_type: post.post_type,
       location: post.location,
-      duration: post.duration,
-      tags: post.tags, // Seçilen etiket ID'lerinin listesi [1, 2]
-      
-      // --- HATA DÜZELTMESİ (IntegrityError) ---
-      // Backend, ilanı kimin oluşturduğunu bilmek zorunda (IntegrityError).
-      // Henüz bir giriş (login) sistemimiz olmadığı için, 
-      // geliştirme amacıyla ilanı 1 ID'li kullanıcının (admin) oluşturduğunu varsayıyoruz.
-      // Django'da 'manage.py createsuperuser' ile bir kullanıcı oluşturduysanız, onun ID'si muhtemelen 1'dir.
-      posted_by: 1 
-      // Not: Backend Serializer'ınız 'posted_by_id' bekliyorsa burayı 'posted_by_id: 1' olarak değiştirin.
-      // 'posted_by: 1' (PK) genellikle DRF için yeterlidir.
+      duration: durationString,
+      tags_ids: post.tags, // Seçilen etiket ID'lerinin listesi [1, 2]
+      frequency: frequency || null,
+      participant_count: participantCount || null,
+      date: date || null,
+      // posted_by backend'de perform_create'de otomatik atanıyor, göndermemize gerek yok
     };
 
     try {
       if (isEditing) {
         // Düzenleme -> PUT isteği
         await api.put(`/posts/${id}/`, dataToSend);
+        toast.success('İlan başarıyla güncellendi!');
       } else {
         // Yeni -> POST isteği
         await api.post('/posts/', dataToSend);
+        toast.success('İlan başarıyla yayınlandı!');
       }
       setLoading(false);
       navigate("/"); // Başarılı olunca ana sayfaya dön
@@ -188,7 +195,7 @@ export default function Post() {
         // Hata HTML olarak geldiyse (Django'nun debug sayfası)
         if (typeof err.response.data === 'string' && err.response.data.includes('IntegrityError')) {
           if (err.response.data.includes('posted_by_id')) {
-            errorMsg = "Backend Hatası: 'posted_by_id' alanı boş bırakılamaz. (Geliştirme için 1 ID'li kullanıcı varsayıldı, lütfen backend'de böyle bir kullanıcı olduğundan emin olun.)";
+            errorMsg = "Backend Hatası: 'posted_by_id' alanı boş bırakılamaz.";
           } else {
             errorMsg = "Backend Bütünlük Hatası (IntegrityError)";
           }
@@ -205,6 +212,7 @@ export default function Post() {
       }
       
       setError(errorMsg);
+      toast.error(errorMsg);
       setLoading(false);
     }
   };
@@ -218,160 +226,338 @@ export default function Post() {
     );
   }
 
+  // Seçili tag'lerin isimlerini al (ID'ye göre eşleştir)
+  const getTagNameById = (tagId) => {
+    const tag = allTags.find(t => t.id === tagId);
+    return tag ? tag.name : '';
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-white">
-        <Link to="/" className="flex items-center gap-3">
+    <div className="min-h-screen bg-gray-50 py-4">
+      <div className="container mx-auto px-4 max-w-3xl">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-md">
-            <Leaf className="w-6 h-6" />
+            <PenLine className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-blue-600 font-bold text-lg">The Hive</h3>
+            <h1 className="text-blue-600 font-bold text-lg">{isEditing ? 'Edit Post' : 'Create Post'}</h1>
+            <p className="text-xs text-gray-500">Fill in the details for your offer or need</p>
           </div>
-        </Link>
-        <h1 className="text-xl font-semibold text-gray-800">
-          {isEditing ? "İlanı Düzenle" : "Yeni İlan Oluştur"}
-        </h1>
-        <div className="w-24"></div> {/* Başlığı ortalamak için boşluk */}
-      </div>
+        </div>
 
-      {/* Form Alanı */}
-      <div className="flex-grow flex items-center justify-center p-4 md:p-8">
-        <form 
-          onSubmit={handleSubmit} 
-          className="w-full max-w-2xl bg-white p-8 rounded-lg shadow-xl border border-gray-200"
-        >
+        <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-center text-sm">
+            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
               {error}
             </div>
           )}
 
-          {/* İlan Tipi (Teklif/İhtiyaç) */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              İlan Tipi
-            </label>
-            <Select
-              name="post_type"
-              value={post.post_type}
-              onValueChange={(value) => setPost(p => ({ ...p, post_type: value }))}
-            >
-              <SelectItem value="offer">
-                Teklif (Hizmet/Ürün Sunuyorum)
-              </SelectItem>
-              <SelectItem value="need">
-                İhtiyaç (Hizmet/Ürün Arıyorum)
-              </SelectItem>
-            </Select>
-          </div>
-          
-          {/* Başlık */}
-          <div className="mb-4">
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-              Başlık
-            </label>
-            <Input
-              id="title"
-              name="title"
-              type="text"
-              placeholder="Örn: Bahçe işleri için yardım"
-              value={post.title}
-              onChange={handleChange}
-              required
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Post Type */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Post Type</Label>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setPost({ ...post, post_type: 'offer' })}
+                  className={`w-full flex items-center justify-between px-3 py-3 rounded-lg border transition-all ${
+                    post.post_type === 'offer'
+                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
+                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      post.post_type === 'offer' ? 'border-blue-600' : 'border-gray-400'
+                    }`}>
+                      {post.post_type === 'offer' && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                      )}
+                    </div>
+                    <span className="text-sm">Offer - I can provide this service</span>
+                  </div>
+                </button>
 
-          {/* Açıklama */}
-          <div className="mb-4">
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-              Açıklama
-            </label>
-            <Textarea
-              id="description"
-              name="description"
-              placeholder="İlanınız hakkında detaylı bilgi verin..."
-              value={post.description}
-              onChange={handleChange}
-              required
-            />
-          </div>
+                <button
+                  type="button"
+                  onClick={() => setPost({ ...post, post_type: 'need' })}
+                  className={`w-full flex items-center justify-between px-3 py-3 rounded-lg border transition-all ${
+                    post.post_type === 'need'
+                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
+                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      post.post_type === 'need' ? 'border-blue-600' : 'border-gray-400'
+                    }`}>
+                      {post.post_type === 'need' && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                      )}
+                    </div>
+                    <span className="text-sm">Need - I'm looking for this service</span>
+                  </div>
+                </button>
+              </div>
+            </div>
 
-          <Separator />
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {/* Konum */}
-            <div>
-              <label htmlFor="location" className="block text-sm font-medium text-gray-700">
-                <MapPin className="w-4 h-4 inline-block mr-1 text-gray-500" />
-                Konum
-              </label>
+            {/* Title */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Title</Label>
               <Input
-                id="location"
-                name="location"
-                type="text"
-                placeholder="Örn: Kadıköy, İstanbul"
-                value={post.location}
-                onChange={handleChange}
                 required
+                placeholder="Enter post title"
+                value={post.title}
+                onChange={(e) => setPost({ ...post, title: e.target.value })}
+                className="h-10 text-sm border-blue-500/20"
               />
             </div>
-            
-            {/* Süre */}
-            <div>
-              <label htmlFor="duration" className="block text-sm font-medium text-gray-700">
-                <Clock className="w-4 h-4 inline-block mr-1 text-gray-500" />
-                Tahmini Süre
-              </label>
-              <Input
-                id="duration"
-                name="duration"
-                type="text"
-                placeholder="Örn: 2 saat"
-                value={post.duration}
-                onChange={handleChange}
-              />
-            </div>
-          </div>
-          
-          {/* Etiket Seçimi (Tags) */}
-          <div className="mb-4">
-             <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
-              Kategoriler (Birden fazla seçmek için Command/Ctrl tuşuna basın)
-            </label>
-            <select
-              id="tags"
-              name="tags"
-              multiple={true}
-              value={post.tags} // post.tags bir ID dizisi olmalı: [1, 3]
-              onChange={handleTagChange}
-              className="flex h-32 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {allTags.map(tag => (
-                <option key={tag.id} value={tag.id}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          {/* Eylem Butonları */}
-          <div className="flex items-center justify-end gap-4 mt-8">
-            <Link to="/">
-              <Button type="button" variant="outline" disabled={loading}>
-                İptal
-              </Button>
-            </Link>
-            <Button type="submit" variant="default" disabled={loading}>
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                isEditing ? "Güncelle" : "Yayınla"
+            {/* Description */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Description</Label>
+              <Textarea
+                required
+                placeholder="Describe your offer or need"
+                rows={4}
+                value={post.description}
+                onChange={(e) => setPost({ ...post, description: e.target.value })}
+                className="text-sm border-blue-500/20 resize-none"
+              />
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Tags (Minimum 1 Required)</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add a tag"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                  className="h-10 text-sm border-blue-500/20"
+                />
+                <Button 
+                  type="button" 
+                  onClick={handleAddTag}
+                  className="h-10 px-4"
+                >
+                  Add
+                </Button>
+              </div>
+              
+              {selectedTagIds.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedTagIds.map((tagId) => {
+                    const tagName = getTagNameById(tagId);
+                    if (!tagName) return null;
+                    return (
+                      <Badge 
+                        key={tagId} 
+                        className="bg-gray-200 text-gray-800 hover:bg-gray-300 px-2.5 py-0.5 text-xs font-semibold"
+                      >
+                        {tagName}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTag(tagId)}
+                          className="ml-2 hover:text-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
               )}
-            </Button>
-          </div>
-        </form>
+            </div>
+
+            {/* Duration, Date, Participants */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Duration */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  Duration (Hours)
+                </Label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  value={estimatedHours}
+                  onChange={(e) => setEstimatedHours(parseFloat(e.target.value) || 0)}
+                  className="h-10 text-sm border-blue-500/20"
+                />
+              </div>
+
+              {/* Date */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4 text-blue-600" />
+                  Date
+                </Label>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="h-10 text-sm border-blue-500/20"
+                />
+              </div>
+
+              {/* Participants Count */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-600" />
+                  Participants Count
+                </Label>
+                <div className="space-y-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    value={participantCount}
+                    onChange={(e) => setParticipantCount(parseInt(e.target.value) || 1)}
+                    className="h-10 text-sm border-blue-500/20"
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="group-activity"
+                      type="checkbox"
+                      checked={isGroupActivity}
+                      onChange={(e) => setIsGroupActivity(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="group-activity" className="text-xs text-gray-500">
+                      Group Activity
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Service Frequency */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-blue-600" />
+                Service Frequency
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFrequency('one-time')}
+                  className={`px-3 py-2 rounded-lg border transition-all ${
+                    frequency === 'one-time'
+                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
+                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                      frequency === 'one-time' ? 'border-blue-600' : 'border-gray-400'
+                    }`}>
+                      {frequency === 'one-time' && (
+                        <div className="w-2 h-2 rounded-full bg-blue-600" />
+                      )}
+                    </div>
+                    <span className="text-xs">One-time</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFrequency('weekly')}
+                  className={`px-3 py-2 rounded-lg border transition-all ${
+                    frequency === 'weekly'
+                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
+                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                      frequency === 'weekly' ? 'border-blue-600' : 'border-gray-400'
+                    }`}>
+                      {frequency === 'weekly' && (
+                        <div className="w-2 h-2 rounded-full bg-blue-600" />
+                      )}
+                    </div>
+                    <span className="text-xs">Weekly</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFrequency('monthly')}
+                  className={`px-3 py-2 rounded-lg border transition-all ${
+                    frequency === 'monthly'
+                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
+                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                      frequency === 'monthly' ? 'border-blue-600' : 'border-gray-400'
+                    }`}>
+                      {frequency === 'monthly' && (
+                        <div className="w-2 h-2 rounded-full bg-blue-600" />
+                      )}
+                    </div>
+                    <span className="text-xs">Monthly</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Location */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Location</Label>
+              <Select 
+                value={post.location} 
+                onValueChange={(value) => setPost({ ...post, location: value })}
+              >
+                <SelectTrigger className="h-10 text-sm border-blue-500/20">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Kadıköy">Kadıköy</SelectItem>
+                  <SelectItem value="Beşiktaş">Beşiktaş</SelectItem>
+                  <SelectItem value="Üsküdar">Üsküdar</SelectItem>
+                  <SelectItem value="Şişli">Şişli</SelectItem>
+                  <SelectItem value="Bakırköy">Bakırköy</SelectItem>
+                  <SelectItem value="Fatih">Fatih</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-gray-200">
+              <Button 
+                type="submit" 
+                className="h-10 text-sm shadow-md"
+                disabled={loading || post.tags.length === 0}
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
+                {isEditing ? 'Update' : 'Publish'}
+              </Button>
+              <Button 
+                type="button" 
+                variant="outline"
+                className="h-10 text-sm shadow-sm"
+                onClick={() => navigate('/')}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
