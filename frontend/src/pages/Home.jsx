@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api"; // api.js'teki instance'ı kullan
 import { Link } from "react-router-dom"; // Sayfalar arası geçiş için
 import {
   MapPin,
@@ -207,10 +207,6 @@ export default function Home() {
   const [selectedLocation, setSelectedLocation] = useState("");
   const [selectedType, setSelectedType] = useState("");
 
-  // Nginx proxy'si /api/ isteklerini backend'e yönlendireceği için
-  // burada tam URL'e gerek yok. Sadece göreceli yol kullanıyoruz.
-  const API_BASE_URL = ""; 
-
   useEffect(() => {
     const fetchPosts = async () => {
       try {
@@ -223,7 +219,7 @@ export default function Home() {
         if (selectedLocation) params.append('location', selectedLocation);
         if (searchTerm) params.append('search', searchTerm); // Backend'de 'search' filtresi olmalı
 
-        const response = await axios.get(`${API_BASE_URL}/api/posts/`, { params });
+        const response = await api.get('/posts/', { params });
         
         const formattedPosts = response.data.map(post => ({
           id: post.id,
@@ -257,7 +253,7 @@ export default function Home() {
 
     const fetchTags = async () => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/tags/`);
+        const response = await api.get('/tags/');
         setTags(response.data); // Bu, {id: 1, name: "Gardening"} listesi
       } catch (err) {
         console.error("Etiketleri çekerken hata:", err);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   Clock,
@@ -86,19 +86,16 @@ export default function Post() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // API adresimiz (proxy üzerinden)
-  const API_BASE_URL = "";
-
   // Düzenleme modundaysak, mevcut ilanın verilerini çek
   useEffect(() => {
     // Etiketleri her zaman çek
-    axios.get(`${API_BASE_URL}/api/tags/`)
+    api.get('/tags/')
       .then(res => setAllTags(res.data))
       .catch(err => console.error("Etiketler çekilemedi:", err));
 
     if (isEditing) {
       setLoading(true);
-      axios.get(`${API_BASE_URL}/api/posts/${id}/`)
+      api.get(`/posts/${id}/`)
         .then(response => {
           // Backend'den gelen veriyi form state'ine set et
           const { title, description, post_type, location, duration, tags } = response.data;
@@ -175,10 +172,10 @@ export default function Post() {
     try {
       if (isEditing) {
         // Düzenleme -> PUT isteği
-        await axios.put(`${API_BASE_URL}/api/posts/${id}/`, dataToSend);
+        await api.put(`/posts/${id}/`, dataToSend);
       } else {
         // Yeni -> POST isteği
-        await axios.post(`${API_BASE_URL}/api/posts/`, dataToSend);
+        await api.post('/posts/', dataToSend);
       }
       setLoading(false);
       navigate("/"); // Başarılı olunca ana sayfaya dön

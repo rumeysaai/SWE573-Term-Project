@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.env.local
+.env.prod
+*.md
+README.md
+docker-compose.yml
+docker-compose.prod.yml
+.dockerignore
+node_modules
+__pycache__
+*.pyc
+*.db
+*.sqlite3
+.DS_Store
+
