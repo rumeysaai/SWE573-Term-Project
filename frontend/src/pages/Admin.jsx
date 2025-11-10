@@ -3,9 +3,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "./ui/card";
-import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
+} from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
 import {
   Table,
   TableBody,
@@ -13,7 +13,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "./ui/table";
+} from "../components/ui/table";
 import {
   BarChart,
   Bar,
@@ -33,7 +33,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-export function AdminPage() {
+export function Admin() {
   const metrics = {
     totalExchanges: 1247,
     activeUsers: 328,

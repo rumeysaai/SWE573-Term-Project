@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 from .models import Profile, Tag, Post
 
 class TagSerializer(serializers.ModelSerializer):
@@ -11,16 +12,67 @@ class TagSerializer(serializers.ModelSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ['avatar', 'timebank_balance']
+        fields = ['avatar', 'time_balance']
 
-# Kullanıcı adı ve profilini birleştiren serializer
 class UserSerializer(serializers.ModelSerializer):
-    profile = ProfileSerializer(read_only=True)
+    # 'profile' alanını (içindeki time_balance ile) kullanıcıyla birlikte göster
+    profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'profile']
+        fields = ['id', 'username', 'email', 'profile']
+    
+    def get_profile(self, obj):
+        # Profil bakiyesini alıp döndür
+        return {
+            'time_balance': obj.profile.time_balance,
+            'avatar': obj.profile.avatar
+        }
 
+# YENİ: Kayıt işlemi için serializer
+class RegisterSerializer(serializers.ModelSerializer):
+    # Django User modelinde 'username' zorunludur.
+    # Frontend'den 'userName' olarak geliyor, biz 'username' olarak eşleştiriyoruz.
+    username = serializers.CharField(required=True)
+    email = serializers.EmailField(required=True)
+    
+    # Parolayı doğrulamak için
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password2 = serializers.CharField(write_only=True, required=True, label="Parola Tekrarı")
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'password2']
+
+    def validate(self, attrs):
+        # 1. Parolalar eşleşiyor mu?
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({"password": "Parolalar eşleşmiyor."})
+        
+        # 2. Email adresi zaten kayıtlı mı?
+        if User.objects.filter(email=attrs['email']).exists():
+            raise serializers.ValidationError({"email": "Bu e-posta adresi zaten kullanılıyor."})
+        
+        # 3. Kullanıcı adı zaten alınmış mı?
+        if User.objects.filter(username=attrs['username']).exists():
+            raise serializers.ValidationError({"username": "Bu kullanıcı adı zaten alınmış."})
+
+        return attrs
+
+    def create(self, validated_data):
+        # create_user metodu parolayı otomatik olarak hash'ler (şifreler)
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password']
+        )
+        
+        # ❗ BAŞLANGIÇ BONUSU
+        # Sinyal, profili oluşturdu. Biz şimdi bonusu ekliyoruz.
+        user.profile.time_balance = 5.0  # 5 saatlik bonus
+        user.profile.save()
+        
+        return user
 
 # Ana İlan (Post) Serializer'ı
 class PostSerializer(serializers.ModelSerializer):
