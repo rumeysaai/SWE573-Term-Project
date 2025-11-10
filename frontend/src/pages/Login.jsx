@@ -1,16 +1,19 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card } from '../components/ui/card';
 import { toast } from 'sonner';
-import api from '../api'; 
+import { useAuth } from '../App'; 
 
 export default function Login() {
     const [formData, setFormData] = useState({
-      email: '',
+      userName: '',
       password: '',
     });
+    const { login } = useAuth();
+    const navigate = useNavigate();
   
     const handleChange = (e) => {
       const { id, value } = e.target;
@@ -23,42 +26,18 @@ export default function Login() {
     const handleSubmit = async (e) => {
         e.preventDefault();
   
-        // API endpoint'i (baseURL zaten 'api.js' içinde tanımlı)
-        const API_URL = '/api/login/';
-  
         try {
-          // --- SİZİN İSTEDİĞİNİZ KOD ---
-          // 'api' instance'ı kullanılır.
-          // Backend 'username' beklediği için manuel eşleştirme yapılır.
-          const response = await api.post(API_URL, {
-            username: formData.userName, // React state'i (userName)
-            password: formData.password,
-          });
-          // --- BİTTİ ---
+          const success = await login(formData.userName, formData.password);
           
-          // BAŞARILI: Sunucudan 200 OK durumu geldi
-          const user = response.data; // UserSerializer'dan gelen veri
-          toast.success('Giriş başarılı! Hoş geldiniz.');
-          console.log('Giriş yapan kullanıcı:', user);
-  
-          // TODO: Kullanıcıyı state'e kaydedin ve ana sayfaya yönlendirin
-  
-        } catch (error) {
-          // HATALI: Sunucudan 4xx veya 5xx durumu geldi
-          if (error.response && error.response.data) {
-            // Django'dan gelen {"error": "..."} mesajı
-            const errorMessage = error.response.data.error || 'Bilinmeyen bir hata oluştu.';
-            toast.error(`Giriş Hatası: ${errorMessage}`);
-            console.error('Login Error Data:', error.response.data);
-  
-          } else if (error.request) {
-            toast.error('Sunucuya bağlanılamadı. (Backend çalışıyor mu?)');
+          if (success) {
+            toast.success('Giriş başarılı! Hoş geldiniz.');
+            navigate('/');
           } else {
-            toast.error('İstek gönderilirken bir hata oluştu.');
+            toast.error('Giriş başarısız. Kullanıcı adı veya şifre hatalı.');
           }
-          
-          console.error('--- FULL LOGIN ERROR ---');
-          console.error(error);
+        } catch (error) {
+          console.error('Login error:', error);
+          toast.error('Giriş yapılırken bir hata oluştu.');
         }
       };
   
@@ -75,13 +54,13 @@ export default function Login() {
   
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email">E-posta veya Kullanıcı Adı</Label>
+              <Label htmlFor="userName">Kullanıcı Adı</Label>
               <Input
-                id="email"
+                id="userName"
                 type="text"
-                placeholder="ornek@email.com veya kullaniciadi"
+                placeholder="kullaniciadi"
                 required
-                value={formData.email}
+                value={formData.userName}
                 onChange={handleChange}
               />
             </div>

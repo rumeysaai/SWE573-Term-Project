@@ -9,12 +9,7 @@ import Home from './pages/Home';
 import Post from './pages/Post';
 import Negotiation from './pages/Negotiation';
 import Login from './pages/Login';
-import Signup from './pages/Signup'; 
-import axios from 'axios';
-
-axios.defaults.baseURL = 'http://localhost:8000'; 
-
-axios.defaults.withCredentials = true;
+import Signup from './pages/Signup';
 
 function LoadingSpinner() {
   return (

@@ -5,14 +5,29 @@ ROOT_URLCONF = 'the_hive.urls'
 # ... (diğer ayarlar) ...
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECRET_KEY'i .env'den al
-SECRET_KEY = os.environ.get('SECRET_KEY')
+# Yardımcı fonksiyonlar
+def get_env_list(name, default):
+    value = os.environ.get(name)
+    if value:
+        return [item.strip() for item in value.split(',') if item.strip()]
+    return default
 
-# DEBUG ayarını .env'den al
-DEBUG = os.environ.get('DEBUG', '0') == '1'
+
+def get_env_bool(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in ('1', 'true', 'yes', 'on')
+
+
+# SECRET_KEY'i .env'den al, yoksa geliştirme için varsayılan oluştur
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-me')
+
+# DEBUG ayarını .env'den al (varsayılan True)
+DEBUG = get_env_bool('DEBUG', True)
 
 # Django'nun (Docker içinden) backend'e ve localhost'a erişimine izin ver
-ALLOWED_HOSTS = ['backend', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = get_env_list('ALLOWED_HOSTS', ['backend', 'localhost', '127.0.0.1'])
 
 # ... (INSTALLED_APPS vb.) ...
 INSTALLED_APPS = [
@@ -80,8 +95,8 @@ DATABASES = {
         'NAME': os.environ.get('POSTGRES_DB'),
         'USER': os.environ.get('POSTGRES_USER'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
-        'HOST': 'db', # docker-compose'daki servis adı
-        'PORT': 5432,
+        'HOST': os.environ.get('DB_HOST', 'db'),  # docker-compose'daki servis adı varsayılan
+        'PORT': int(os.environ.get('DB_PORT', 5432)),
     }
 }
 
@@ -92,34 +107,26 @@ REST_FRAMEWORK = {
 }
 
 
-# CORS ayarını da güncelleyelim (Sadece debug ise localhost'a izin ver)
-if DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    CSRF_TRUSTED_ORIGINS = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-else:
-    CORS_ALLOWED_ORIGINS = [
+# CORS ayarını env'den oku, yoksa varsayılan localhost değerlerini kullan
+LOCAL_FRONTEND_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+
+CORS_ALLOWED_ORIGINS = get_env_list('CORS_ALLOWED_ORIGINS', LOCAL_FRONTEND_ORIGINS)
+CSRF_TRUSTED_ORIGINS = get_env_list('CSRF_TRUSTED_ORIGINS', LOCAL_FRONTEND_ORIGINS)
+
 # React'in cookie göndermesine izin ver
 CORS_ALLOW_CREDENTIALS = True 
 
-# Cookie'lerin domain'ler arası çalışmasına izin ver (Geliştirme için)
-#CSRF_COOKIE_SAMESITE = 'None'
-#SESSION_COOKIE_SAMESITE = 'None'
-CSRF_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_SAMESITE = 'Lax'
+# Cookie ayarlarını env'den yönet (cross-site için None/Secure kullanabilirsiniz)
+CSRF_COOKIE_SAMESITE = os.environ.get('CSRF_COOKIE_SAMESITE', 'Lax')
+SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
 
-# (Prodüksiyona geçerken 'SECURE' True olmalı)
-# CSRF_COOKIE_SECURE = True 
-# SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = False 
-SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = get_env_bool('CSRF_COOKIE_SECURE', False)
+SESSION_COOKIE_SECURE = get_env_bool('SESSION_COOKIE_SECURE', False)
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 STATIC_URL = 'django-static/'
