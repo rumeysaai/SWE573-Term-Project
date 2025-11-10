@@ -3,7 +3,6 @@ services:
   # Veritabanı Servisi (PostgreSQL)
   db:
     image: postgres:latest
-    container_name: postgres_db
     volumes:
       - postgres_data:/var/lib/postgresql
     # 2. .env dosyasındaki değişkenleri buraya bağlayın
@@ -11,23 +10,23 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5  
+    networks:
+      - internal_bridge
 
   # Backend Servisi (Django)
   backend:
     build: ./backend
-    container_name: django_backend
+    networks:
+      - internal_bridge # EKLE: Frontend'in backend'i bu isimle görmesi için
+      - dokploy-network # EKLE: Traefik ile iletişim için
     env_file: .env
     volumes:
       - ./backend:/app # Kodu konteynere bağla (geliştirme için)
-    ports:
-      - "8000:8000" # Django'ya lokalden erişim (test için)
     environment:
       # 3. Django'nun doğru host'a (db) bağlanmasını sağlayın
       DB_HOST: db
@@ -45,11 +44,20 @@ services:
   # Frontend Servisi (React + Nginx)
   frontend:
     build: ./frontend
-    container_name: react_frontend
-    ports:
-      - "3000:80" # Lokal port 3000'i Nginx'in 80 portuna bağla
+    # container_name: react_frontend
+    # ports:
+    #   - "3001:81" 
     depends_on:
-      - backend # Başlamadan önce backend'in hazır olmasını bekle
+      - backend
+    networks:
+      - internal_bridge # EKLE: Backend'i görebilmesi için KRİTİK!
+      - dokploy-network # EKLE: Traefik ile iletişim için 
 
 volumes:
   postgres_data: {}
+
+networks:
+  dokploy-network:  # Dokploy'un Traefik Ağı (Dışarıdan erişim ve SSL)
+    external: true
+  internal_bridge:  # Servislerin birbirini görmesi için özel bir ağ
+    driver: bridge
