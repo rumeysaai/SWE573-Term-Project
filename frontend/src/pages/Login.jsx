@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -88,9 +88,9 @@ export default function Login() {
               
               <div className="text-gray-500">
                 Hesabın yok mu?{' '}
-                <a href="#" className="text-blue-600 hover:text-blue-700 transition-colors duration-150">
+                <Link to="/register" className="text-blue-600 hover:text-blue-700 transition-colors duration-150">
                   Kayıt Ol
-                </a>
+                </Link>
               </div>
             </div>
           </form>
