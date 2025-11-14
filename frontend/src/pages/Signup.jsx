@@ -41,15 +41,15 @@ export default function Signup() {
   
       
       if (formData.password !== formData.confirmPassword) {
-        toast.error('Parolalar eşleşmiyor.');
+        toast.error('Passwords do not match.');
         return;
       }
       if (formData.password.length < 8) {
-        toast.error('Parola en az 8 karakter olmalıdır.');
+        toast.error('Password must be at least 8 characters.');
         return;
       }
       if (!formData.acceptedTerms) {
-        toast.error('Topluluk kurallarını kabul etmelisiniz.');
+        toast.error('You must accept the community rules.');
         return;
       }
   
@@ -65,7 +65,7 @@ export default function Signup() {
   
         setLoading(false);
         setUser(response.data); 
-        toast.success('Hesabınız oluşturuldu! Ana sayfaya yönlendiriliyorsunuz...');
+        toast.success('Your account has been created! Redirecting to home page...');
         
         setTimeout(() => {
           navigate('/');
@@ -74,13 +74,13 @@ export default function Signup() {
       } catch (error) {
         if (error.response && error.response.data) {
           const errors = error.response.data;
-          if (errors.username) toast.error(`Kullanıcı Adı: ${errors.username[0]}`);
+          if (errors.username) toast.error(`Username: ${errors.username[0]}`);
           if (errors.email) toast.error(`Email: ${errors.email[0]}`);
-          if (errors.password) toast.error(`Parola: ${errors.password[0]}`);
+          if (errors.password) toast.error(`Password: ${errors.password[0]}`);
           if (errors.general) toast.error(errors.general);
           
         } else {
-          toast.error('Bilinmeyen bir hata oluştu. Lütfen tekrar deneyin.');
+          toast.error('An unknown error occurred. Please try again.');
         }
         setLoading(false);
       }
@@ -93,18 +93,18 @@ export default function Signup() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-secondary rounded-2xl mb-4">
               <Leaf className="w-8 h-8 text-secondary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold mb-1">The Hive'a Katıl</h1>
-            <p className="text-slate-600">Topluluk TimeBank Hesabı Oluştur</p>
+            <h1 className="text-2xl font-normal mb-1">Join The Hive</h1>
+            <p className="text-slate-600">Create a Community TimeBank Account</p>
           </CardHeader>
   
           <form onSubmit={handleSubmit} className="space-y-5">
             
             <div className="space-y-2">
-              <Label htmlFor="userName">Kullanıcı Adı (Görünür İsim)</Label>
+              <Label htmlFor="userName">Username (Display Name)</Label>
               <Input
                 id="userName"
                 type="text"
-                placeholder="Benzersiz kullanıcı adı"
+                placeholder="Unique username"
                 required
                 value={formData.userName}
                 onChange={handleChange}
@@ -112,11 +112,11 @@ export default function Signup() {
             </div>
   
             <div className="space-y-2">
-              <Label htmlFor="email">E-posta</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="ornek@email.com"
+                placeholder="example@email.com"
                 required
                 value={formData.email}
                 onChange={handleChange}
@@ -124,11 +124,11 @@ export default function Signup() {
             </div>
   
             <div className="space-y-2">
-              <Label htmlFor="password">Parola (min. 8 karakter)</Label>
+              <Label htmlFor="password">Password (min. 8 characters)</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Güçlü bir parola seçin"
+                placeholder="Choose a strong password"
                 required
                 minLength={8}
                 value={formData.password}
@@ -137,11 +137,11 @@ export default function Signup() {
             </div>
   
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Parola Tekrarı</Label>
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
               <Input
                 id="confirmPassword"
                 type="password"
-                placeholder="Parolanızı tekrar girin"
+                placeholder="Re-enter your password"
                 required
                 value={formData.confirmPassword}
                 onChange={handleChange}
@@ -158,30 +158,30 @@ export default function Signup() {
                 htmlFor="terms"
                 className="text-sm text-slate-600 leading-tight cursor-pointer"
               >
-                {/* 'href=#' yerine 'Link to' kullanıldı */}
+                
                 <Link to="/terms" className="text-primary hover:underline">
-                  Topluluk Kurallarını
+                  Community Rules
                 </Link>{' '}
-                okudum ve kabul ediyorum
+                I have read and accept
               </label>
             </div>
   
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Hesap Oluşturuluyor...' : 'Kayıt Ol'}
+              {loading ? 'Creating Account...' : 'Sign Up'}
             </Button>
   
             <div className="text-center text-sm text-slate-600">
-              Zaten hesabın var mı?{' '}
-              {/* 'href=#' yerine 'Link to' kullanıldı */}
+              Already have an account?{' '}
+              
               <Link to="/login" className="text-primary hover:underline font-medium">
-                Giriş Yap
+                Sign In
               </Link>
             </div>
           </form>
   
           <div className="mt-6 p-4 bg-secondary/20 rounded-lg border border-secondary/40">
             <p className="text-xs text-foreground">
-              <strong>Başlangıç Bonusu:</strong> Yeni üyelere 5 saat TimeBank kredisi hediye edilir! 🎉
+              <strong>Welcome Bonus:</strong> New members receive 5 hours of TimeBank credit as a gift! 🎉
             </p>
           </div>
         </Card>

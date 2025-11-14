@@ -11,45 +11,93 @@ class Profile(models.Model):
     def __str__(self):
         return f"{self.user.username}'s Profile"
 
-# ❗ ÖNEMLİ: Sinyal
-# Yeni bir User (kullanıcı) oluşturulduğu an bu fonksiyon tetiklenir
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         Profile.objects.create(user=instance)
 
-# Tag (Etiket) modeli
+
 class Tag(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.name
 
-# Ana İlan (Post) modeli
 class Post(models.Model):
     TYPE_CHOICES = [
-        ('offer', 'Offer'), # Teklif
-        ('need', 'Need'),   # İhtiyaç
+        ('offer', 'Offer'), 
+        ('need', 'Need'), 
     ]
 
     title = models.CharField(max_length=200)
     description = models.TextField()
     
-    # İlişkiler
+    # Relations
     posted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="posts")
     tags = models.ManyToManyField(Tag, blank=True)
 
-    # İlan Detayları
+    # Post Details
     post_type = models.CharField(max_length=5, choices=TYPE_CHOICES, default='offer')
     location = models.CharField(max_length=200)
-    duration = models.CharField(max_length=100) # "3-4 saat", "Esnek" gibi
+    duration = models.CharField(max_length=100) 
     
-    # Otomatik Tarihler
+    frequency = models.CharField(max_length=50, blank=True, null=True) 
+    participant_count = models.IntegerField(default=1, blank=True, null=True)
+    date = models.DateField(blank=True, null=True) 
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-created_at'] # En yeniden eskiye sırala
+        ordering = ['-created_at'] 
 
     def __str__(self):
         return self.title
+
+
+class Request(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='requests')
+    requester = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_requests')
+    provider = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_requests')
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    message = models.TextField(blank=True, null=True)  
+    
+    proposed_date = models.DateField(blank=True, null=True) 
+    proposed_time = models.TimeField(blank=True, null=True) 
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = [['post', 'requester']]  # Bir kullanıcı aynı post'a sadece bir kez başvurabilir
+
+    def __str__(self):
+        return f"{self.requester.username} -> {self.post.title} ({self.status})"
+
+
+class Chat(models.Model):
+    request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='messages', blank=True, null=True)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')
+    
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.sender.username} -> {self.receiver.username}: {self.message[:50]}"

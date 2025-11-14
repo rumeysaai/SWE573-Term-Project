@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import api from "../api"; // api.js'teki instance'ı kullan
-import { Link } from "react-router-dom"; // Sayfalar arası geçiş için
+import api from "../api"; 
+import { Link, useNavigate } from "react-router-dom"; 
 import {
   MapPin,
   Search,
@@ -12,187 +12,29 @@ import {
   MessageCircle,
   Send,
   Loader2,
-  Pencil, // Düzenleme ikonu için eklendi
+  Pencil,
+  RefreshCw,
+  Users,
+  LogOut,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 
-// --- Bileşenler (Bu sayfada kullanmak için) ---
-// Normalde bu bileşenler 'components/ui.jsx' gibi paylaşılan bir dosyada
-// olmalı, ancak isteğiniz üzerine HomePage içinde tanımlanıyorlar.
+import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
+import { Separator } from "../components/ui/separator";
 
-const Avatar = ({ src, fallback }) => (
-  <div className="relative flex h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-blue-500/20">
-    <img className="aspect-square h-full w-full" src={src} alt="Kullanıcı avatarı" onError={(e) => {
-        e.currentTarget.src = `https://placehold.co/100x100/EBF8FF/3B82F6?text=${fallback}`;
-      }} />
-  </div>
-);
-
-const Badge = ({ children, variant = "secondary" }) => {
-  const baseClasses = "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
-  const variants = {
-    secondary: "border-transparent bg-gray-200 text-gray-800",
-    offer: "border-transparent bg-blue-600 text-white shadow-sm",
-    need: "border-transparent bg-orange-500 text-white shadow-sm",
-  };
-  return (
-    <div className={`${baseClasses} ${variants[variant] || variants.secondary}`}>
-      {children}
-    </div>
-  );
-};
-
-const Card = ({ children, className = "", ...props }) => (
-  <div
-    className={`rounded-lg border bg-white text-gray-900 shadow-sm transition-all ${className}`}
-    {...props}
-  >
-    {children}
-  </div>
-);
-
-const CardHeader = ({ children, className = "" }) => (
-  <div className={`flex flex-col space-y-1.5 p-4 pb-3 ${className}`}>{children}</div>
-);
-
-const CardTitle = ({ children, className = "" }) => (
-  <h3 className={`text-base font-semibold leading-none tracking-tight ${className}`}>
-    {children}
-  </h3>
-);
-
-const CardContent = ({ children, className = "" }) => (
-  <div className={`p-4 pt-0 ${className}`}>{children}</div>
-);
-
-const Button = ({ children, variant = "default", size = "default", className = "", ...props }) => {
-  const baseClasses = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
-  const variants = {
-    default: "bg-blue-600 text-white hover:bg-blue-600/90 shadow-md",
-    ghost: "hover:bg-gray-100 hover:text-gray-900",
-    outline: "border border-blue-500/30 bg-transparent hover:bg-blue-500/5",
-  };
-  const sizes = {
-    default: "h-10 px-4 py-2",
-    sm: "h-9 rounded-md px-3",
-    lg: "h-11 rounded-md px-8",
-  };
-  return (
-    <button
-      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Input = ({ className = "", ...props }) => (
-  <input
-    className={`flex h-10 w-full rounded-md border border-blue-500/20 bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-    {...props}
-  />
-);
-
-const Select = ({ children, onValueChange, placeholder }) => (
-  <select
-    onChange={(e) => onValueChange(e.target.value)}
-    className="flex h-10 w-[180px] items-center justify-between rounded-md border border-blue-500/20 bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-  >
-    <option value="">{placeholder || "Seçiniz"}</option>
-    {children}
-  </select>
-);
-
-const SelectItem = ({ children, value }) => (
-  <option value={value}>{children}</option>
-);
-
-const Dialog = ({ open, onOpenChange, children }) => {
-  if (!open) return null;
-  return (
-    <div
-      onClick={() => onOpenChange(false)}
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative z-50 grid w-full max-w-2xl max-h-[90vh] gap-4 overflow-y-auto rounded-lg border bg-white p-6 shadow-lg"
-      >
-        {children}
-        <button
-          onClick={() => onOpenChange(false)}
-          className="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-        >
-          <span className="text-2xl">&times;</span>
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const DialogHeader = ({ children }) => <div className="flex flex-col space-y-1.5 text-center sm:text-left">{children}</div>;
-const DialogTitle = ({ children }) => <h2 className="text-2xl font-semibold leading-none tracking-tight mb-2">{children}</h2>;
-const DialogDescription = ({ children }) => <div className="text-sm text-gray-500 flex items-center gap-2">{children}</div>;
-
-const Separator = () => <hr className="my-4 border-blue-500/20" />;
-
-const Tabs = ({ defaultValue, onValueChange, children }) => {
-  const [activeTab, setActiveTab] = useState(defaultValue);
-  const handleTabChange = (value) => {
-    setActiveTab(value);
-    if (onValueChange) onValueChange(value);
-  };
-  
-  // Çocukları klonlarken null/undefined kontrolü ekle
-  const clonedChildren = React.Children.map(children, (child) => {
-    if (!child) return null; // Null çocukları atla
-    
-    if (child.type === TabsList) {
-      return React.cloneElement(child, { activeTab, onTabChange: handleTabChange });
-    }
-    if (child.type === TabsContent) {
-      return React.cloneElement(child, { activeTab });
-    }
-    return child;
-  });
-  return <div>{clonedChildren}</div>;
-};
-
-const TabsList = ({ children, className = "", activeTab, onTabChange }) => (
-  <div className={`w-full flex rounded-md bg-gray-200/50 border border-blue-500/20 p-1 ${className}`}>
-    {React.Children.map(children, (child) => {
-      if (!child) return null; // Null çocukları atla
-      return React.cloneElement(child, {
-        isActive: activeTab === child.props.value,
-        onClick: () => onTabChange(child.props.value),
-      });
-    })}
-  </div>
-);
-
-const TabsTrigger = ({ children, className = "", value, isActive, onClick }) => {
-  const activeClasses = "bg-blue-600 text-white";
-  const inactiveClasses = "hover:bg-gray-100";
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${isActive ? activeClasses : inactiveClasses} ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
-
-const TabsContent = ({ children, value, activeTab, className = "" }) => {
-  if (value !== activeTab) return null;
-  return <div className={`mt-4 ${className}`}>{children}</div>;
-};
-
-// --- Ana HomePage Bileşeni ---
+import { SimpleAvatar } from "../components/ui/SimpleAvatar";
+import { SimpleSelect, SimpleSelectItem } from "../components/ui/SimpleSelect";
+import { SimpleDialog, SimpleDialogHeader, SimpleDialogTitle, SimpleDialogDescription } from "../components/ui/SimpleDialog";
+import { SimpleTabs, SimpleTabsList, SimpleTabsTrigger, SimpleTabsContent } from "../components/ui/SimpleTabs";
+import { useAuth } from "../App";
 
 export default function Home() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -201,7 +43,6 @@ export default function Home() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("offers");
 
-  // Arama ve filtre state'leri
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTag, setSelectedTag] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
@@ -212,23 +53,35 @@ export default function Home() {
       try {
         setLoading(true);
         setError(null);
-        // Filtre parametrelerini hazırla
+        
         const params = new URLSearchParams();
         if (selectedType) params.append('post_type', selectedType);
-        if (selectedTag) params.append('tags__name', selectedTag); // Backend'de 'tags__name' filtresi olmalı
+        if (selectedTag) params.append('tags__name', selectedTag); 
         if (selectedLocation) params.append('location', selectedLocation);
-        if (searchTerm) params.append('search', searchTerm); // Backend'de 'search' filtresi olmalı
+        if (searchTerm) params.append('search', searchTerm); 
 
         const response = await api.get('/posts/', { params });
         
-        const formattedPosts = response.data.map(post => ({
+        // Check if response.data is an array, if not, handle pagination or errors
+        let postsData = [];
+        if (Array.isArray(response.data)) {
+          postsData = response.data;
+        } else if (response.data && typeof response.data === 'object') {
+          // Handle paginated response (DRF pagination)
+          postsData = response.data.results || [];
+        }
+        
+        const formattedPosts = postsData.map(post => ({
           id: post.id,
           title: post.title,
-          tags: post.tags, // Bu, backend'den gelen string dizisi ["Gardening", "Music"]
+          tags: post.tags, // This is a string array from backend ["Gardening", "Music"]
           location: post.location,
           type: post.post_type, 
           description: post.description,
           duration: post.duration,
+          frequency: post.frequency,
+          participantCount: post.participant_count,
+          date: post.date,
           postedBy: post.postedBy,
           avatar: post.avatar,
           postedDate: formatDistanceToNow(new Date(post.postedDate), {
@@ -236,7 +89,7 @@ export default function Home() {
             locale: tr,
           }),
           mapPosition: { 
-            // Harita pinleri için rastgele pozisyon
+            // Random position for map pins
             top: `${Math.random() * 60 + 20}%`, 
             left: `${Math.random() * 60 + 20}%` 
           }, 
@@ -244,8 +97,10 @@ export default function Home() {
         
         setPosts(formattedPosts);
       } catch (err) {
-        console.error("Veri çekme hatası:", err);
-        setError("İlanlar yüklenirken bir hata oluştu.");
+        console.error("Data fetching error:", err);
+        console.error("Error response:", err.response?.data);
+        console.error("Error status:", err.response?.status);
+        setError("An error occurred while loading posts.");
       } finally {
         setLoading(false);
       }
@@ -254,20 +109,28 @@ export default function Home() {
     const fetchTags = async () => {
       try {
         const response = await api.get('/tags/');
-        setTags(response.data); // Bu, {id: 1, name: "Gardening"} listesi
+        // Check if response.data is an array, if not, handle pagination
+        let tagsData = [];
+        if (Array.isArray(response.data)) {
+          tagsData = response.data;
+        } else if (response.data && typeof response.data === 'object') {
+          // Handle paginated response (DRF pagination)
+          tagsData = response.data.results || [];
+        }
+        setTags(tagsData); 
       } catch (err) {
-        console.error("Etiketleri çekerken hata:", err);
+        console.error("Error fetching tags:", err);
+        console.error("Error response:", err.response?.data);
+        setTags([]); // Set empty array on error
       }
     };
 
-    fetchPosts(); // Filtreler değiştikçe de çağrılmalı, şimdilik sadece ilk yüklemede
+    fetchPosts(); 
     fetchTags();
-  }, []); // Not: Filtreler değiştiğinde veriyi yeniden çekmek için bu dependency array'i güncellemek gerekir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount, filtering is done client-side 
 
 
-  // Filtrelenmiş veriyi almak için useEffect'i güncelle (Sadece frontend'de filtreleme)
-  // Backend'den filtreleme yapmak daha verimlidir, ancak bu yöntem
-  // frontend'de anlık filtreleme sağlar.
   const filteredPosts = posts.filter(post => {
     const typeMatch = selectedType ? post.type === selectedType : true;
     const tagMatch = selectedTag ? post.tags.includes(selectedTag) : true;
@@ -291,11 +154,16 @@ export default function Home() {
     setIsDialogOpen(true);
   };
 
-  if (loading && posts.length === 0) { // Sadece ilk yüklemede tam ekran loading göster
+  const handleSignOut = async () => {
+    await logout();
+    navigate("/login");
+  };
+
+  if (loading && posts.length === 0) { // Show full screen loading only on initial load
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
-        <p className="ml-4 text-lg text-gray-700">Yükleniyor...</p>
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
+        <p className="ml-4 text-lg text-gray-700">Loading...</p>
       </div>
     );
   }
@@ -309,85 +177,98 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col gap-6 bg-gray-50 min-h-screen pb-4">
+    <div className="flex flex-col gap-6 bg-gray-50 min-h-screen pb-4 px-4 md:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-500/5 to-orange-500/10">
+      <div className="flex items-center justify-between py-4 border-b bg-gradient-to-r from-primary/5 to-orange-500/10">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-md">
+          <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-md">
             <Leaf className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-blue-600 font-bold text-lg">The Hive</h3>
+            <h3 className="text-primary font-normal text-lg">The Hive</h3>
             <p className="text-xs text-gray-500">
-              Topluluk Zaman Bankası
+            Community-Oriented Service Offering Platform
             </p>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border">
-            <Clock className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium">Bakiye: 0 Saat</span>
+            <Clock className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium">Balance: 0 Hours</span>
           </div>
-          <Button variant="ghost">Profilim</Button>
+          <Button variant="ghost">My Profile</Button>
+          <Button variant="ghost" onClick={handleSignOut}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
         </div>
       </div>
 
       {/* Search Area */}
-      <div className="px-4 space-y-4">
+      <div className="space-y-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
-            placeholder="Metin, etiket veya konuma göre ara..."
-            className="pl-10 bg-white border-blue-500/20 focus:border-blue-500"
+            placeholder="Search by text, tag, or location..."
+            className="pl-10 bg-white border-primary/20 focus:border-primary"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Select
-            placeholder="Etikete göre filtrele"
+        <div className="flex flex-wrap gap-3 items-center">
+          <SimpleSelect
+            placeholder="Filter by tag"
             onValueChange={setSelectedTag}
           >
-            {tags.map((tag) => (
-              <SelectItem key={tag.id} value={tag.name}>
+            {Array.isArray(tags) && tags.map((tag) => (
+              <SimpleSelectItem key={tag.id} value={tag.name}>
                 {tag.name}
-              </SelectItem>
+              </SimpleSelectItem>
             ))}
-          </Select>
+          </SimpleSelect>
 
-          <Select
-            placeholder="Konum"
+          <SimpleSelect
+            placeholder="Location"
             onValueChange={setSelectedLocation}
           >
-            {/* Konumları dinamik olarak postlardan alabiliriz (daha iyi bir yaklaşım) */}
-            {[...new Set(posts.map(p => p.location))].map(location => (
-              <SelectItem key={location} value={location}>
+            {/* We can get locations dynamically from posts (better approach) */}
+            {Array.isArray(posts) && [...new Set(posts.map(p => p.location))].map(location => (
+              <SimpleSelectItem key={location} value={location}>
                 {location}
-              </SelectItem>
+              </SimpleSelectItem>
             ))}
-          </Select>
+          </SimpleSelect>
 
-          <Select
-            placeholder="Tip"
+          <SimpleSelect
+            placeholder="Type"
             onValueChange={setSelectedType}
           >
-            <SelectItem value="offer">Teklifler</SelectItem>
-            <SelectItem value="need">İhtiyaçlar</SelectItem>
-          </Select>
+            <SimpleSelectItem value="offer">Offers</SimpleSelectItem>
+            <SimpleSelectItem value="need">Needs</SimpleSelectItem>
+          </SimpleSelect>
+          
+          <div className="ml-auto">
+            <Link to="/post/new">
+              <Button className="shadow-md bg-primary hover:bg-primary/90 text-white" size="lg">
+                <Leaf className="w-4 h-4 mr-2" />
+                Create New Post
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Map Area */}
-      <div className="px-4">
-        <Card className="overflow-hidden shadow-md border-blue-500/20">
+      <div>
+        <Card className="overflow-hidden shadow-md border-primary/20">
           <CardContent className="p-0">
-            <div className="bg-gradient-to-br from-orange-500/10 via-gray-50 to-blue-500/10 h-[300px] flex items-center justify-center relative overflow-hidden">
+            <div className="bg-gradient-to-br from-orange-500/10 via-gray-50 to-primary/10 h-[300px] flex items-center justify-center relative overflow-hidden">
               <div className="text-gray-500 text-center z-10">
-                <MapPin className="w-8 h-8 mx-auto mb-2 text-blue-600" />
-                <p>Harita Entegrasyonu (Gelecek)</p>
+                <MapPin className="w-8 h-8 mx-auto mb-2 text-primary" />
+                <p>Map Integration (Coming Soon)</p>
                 <p className="text-sm">
-                  İlanlar haritada gösterilecek
+                  Posts will be displayed on the map
                 </p>
               </div>
 
@@ -414,46 +295,45 @@ export default function Home() {
       </div>
 
       {/* Post List with Tabs */}
-      <div className="px-4">
-        <Tabs
+      <div>
+        <SimpleTabs
           defaultValue="offers"
           onValueChange={setActiveTab}
         >
-          <TabsList>
-            <TabsTrigger
+          <SimpleTabsList>
+            <SimpleTabsTrigger
               value="offers"
             >
               <Leaf className="w-4 h-4 mr-2" />
-              Teklifler ({offerPosts.length})
-            </TabsTrigger>
-            <TabsTrigger
+              Offers ({offerPosts.length})
+            </SimpleTabsTrigger>
+            <SimpleTabsTrigger
               value="needs"
-              className="data-[state=active]:bg-orange-500 data-[state=active]:text-white"
             >
               <Package className="w-4 h-4 mr-2" />
-              İhtiyaçlar ({needPosts.length})
-            </TabsTrigger>
-          </TabsList>
+              Needs ({needPosts.length})
+            </SimpleTabsTrigger>
+          </SimpleTabsList>
 
-          <TabsContent value="offers" className="space-y-3 mt-4">
-            {loading && <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto" />}
+          <SimpleTabsContent value="offers" className="space-y-3 mt-4">
+            {loading && <Loader2 className="w-6 h-6 text-primary animate-spin mx-auto" />}
             {!loading && offerPosts.length === 0 && (
-              <p className="text-gray-500 text-center py-4">Filtreye uygun teklif bulunamadı.</p>
+              <p className="text-gray-500 text-center py-4">No offers found matching the filter.</p>
             )}
             {offerPosts.map((post) => (
                 <Card
                   key={post.id}
-                  className="hover:border-blue-500 hover:shadow-md transition-all cursor-pointer border-blue-500/20"
+                  className="hover:border-primary hover:shadow-md transition-all cursor-pointer border-primary/20"
                   onClick={() => handlePostClick(post)}
                 >
-                  <CardHeader>
+                  <CardHeader className="p-4 pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <CardTitle>
+                        <CardTitle className="text-base">
                           {post.title}
                         </CardTitle>
                         <div className="flex items-center flex-wrap gap-2 mt-2">
-                          {post.tags.map((tag) => (
+                          {Array.isArray(post.tags) && post.tags.map((tag) => (
                             <Badge
                               key={tag}
                               variant="secondary"
@@ -466,39 +346,57 @@ export default function Home() {
                       <Badge
                         variant="offer"
                       >
-                        Teklif
+                        Offer
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 pt-0 space-y-2">
                     <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <MapPin className="w-4 h-4 text-blue-600" />
+                      <MapPin className="w-4 h-4 text-primary" />
                       <span>{post.location}</span>
                     </div>
+                    {post.date && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Calendar className="w-4 h-4 text-primary" />
+                        <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                      </div>
+                    )}
+                    {post.frequency && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <RefreshCw className="w-4 h-4 text-primary" />
+                        <span>{post.frequency === 'one-time' ? 'One-time' : post.frequency === 'weekly' ? 'Weekly' : post.frequency === 'monthly' ? 'Monthly' : post.frequency}</span>
+                      </div>
+                    )}
+                    {post.participantCount && post.participantCount > 1 && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Users className="w-4 h-4 text-primary" />
+                        <span>{post.participantCount} participants</span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
-          </TabsContent>
+          </SimpleTabsContent>
 
-          <TabsContent value="needs" className="space-y-3 mt-4">
+          <SimpleTabsContent value="needs" className="space-y-3 mt-4">
              {loading && <Loader2 className="w-6 h-6 text-orange-500 animate-spin mx-auto" />}
              {!loading && needPosts.length === 0 && (
-              <p className="text-gray-500 text-center py-4">Filtreye uygun ihtiyaç bulunamadı.</p>
+              <p className="text-gray-500 text-center py-4">No needs found matching the filter.</p>
             )}
             {needPosts.map((post) => (
                 <Card
                   key={post.id}
-                  className="hover:border-orange-500 hover:shadow-md transition-all cursor-pointer border-blue-500/20"
+                  className="hover:border-orange-500 hover:shadow-md transition-all cursor-pointer border-primary/20"
                   onClick={() => handlePostClick(post)}
                 >
-                  <CardHeader>
+                  <CardHeader className="p-4 pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <CardTitle>
+                        <CardTitle className="text-base">
                           {post.title}
                         </CardTitle>
                         <div className="flex items-center flex-wrap gap-2 mt-2">
-                          {post.tags.map((tag) => (
+                          {Array.isArray(post.tags) && post.tags.map((tag) => (
                             <Badge
                               key={tag}
                               variant="secondary"
@@ -511,62 +409,71 @@ export default function Home() {
                       <Badge
                         variant="need"
                       >
-                        İhtiyaç
+                        Need
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 pt-0 space-y-2">
                     <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <MapPin className="w-4 h-4 text-blue-600" />
+                      <MapPin className="w-4 h-4 text-primary" />
                       <span>{post.location}</span>
                     </div>
+                    {post.date && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Calendar className="w-4 h-4 text-primary" />
+                        <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                      </div>
+                    )}
+                    {post.frequency && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <RefreshCw className="w-4 h-4 text-primary" />
+                        <span>{post.frequency === 'one-time' ? 'One-time' : post.frequency === 'weekly' ? 'Weekly' : post.frequency === 'monthly' ? 'Monthly' : post.frequency}</span>
+                      </div>
+                    )}
+                    {post.participantCount && post.participantCount > 1 && (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Users className="w-4 h-4 text-primary" />
+                        <span>{post.participantCount} participants</span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
-          </TabsContent>
-        </Tabs>
+          </SimpleTabsContent>
+        </SimpleTabs>
       </div>
 
-      {/* Create New Post Button -> Artık Link olarak çalışıyor */}
-      <div className="px-4 pb-4 mt-4">
-        <Link to="/post/new" className="w-full">
-          <Button className="w-full shadow-md" size="lg">
-            <Leaf className="w-4 h-4 mr-2" />
-            Yeni İlan Oluştur
-          </Button>
-        </Link>
-      </div>
 
       {/* Post Detail Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <SimpleDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         {selectedPost && (
           <>
-            <DialogHeader>
+            <SimpleDialogHeader>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <DialogTitle>
+                  <SimpleDialogTitle>
                     {selectedPost.title}
-                  </DialogTitle>
-                  <DialogDescription>
-                    <MapPin className="w-4 h-4 text-blue-600" />
+                  </SimpleDialogTitle>
+                  <SimpleDialogDescription>
+                    <MapPin className="w-4 h-4 text-primary" />
                     {selectedPost.location}
-                  </DialogDescription>
+                  </SimpleDialogDescription>
                 </div>
                 <Badge
                   variant={
                     selectedPost.type === "offer" ? "offer" : "need"
                   }
                 >
-                  {selectedPost.type === "offer" ? "Teklif" : "İhtiyaç"}
+                  {selectedPost.type === "offer" ? "Offer" : "Need"}
                 </Badge>
               </div>
-            </DialogHeader>
+            </SimpleDialogHeader>
 
             <Separator />
 
             {/* User Info */}
-            <div className="flex items-center gap-3 bg-gray-100 p-4 rounded-lg border border-blue-500/10">
-              <Avatar
+            <div className="flex items-center gap-3 bg-gray-100 p-4 rounded-lg border border-primary/10">
+              <SimpleAvatar
                 src={selectedPost.avatar}
                 fallback={selectedPost.postedBy.split(" ").map((n) => n[0]).join("")}
               />
@@ -574,37 +481,37 @@ export default function Home() {
                 <p className="font-medium">{selectedPost.postedBy}</p>
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Calendar className="w-3 h-3" />
-                  <span>{selectedPost.postedDate} yayınlandı</span>
+                  <span>Posted {selectedPost.postedDate}</span>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="text-blue-600">
+              <Button variant="ghost" size="sm" className="text-primary">
                 <User className="w-4 h-4 mr-2" />
-                Profili Görüntüle
+                View Profile
               </Button>
             </div>
 
             {/* Tags */}
             <div className="space-y-2">
-              <p className="text-sm text-gray-500">Kategoriler</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedPost.tags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+              <p className="text-sm text-gray-500">Categories</p>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.isArray(selectedPost.tags) && selectedPost.tags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="secondary"
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
             </div>
 
             <Separator />
 
             {/* Description */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-blue-600 font-medium">
+              <div className="flex items-center gap-2 text-primary font-medium">
                 <MessageCircle className="w-5 h-5" />
-                <h4>Açıklama</h4>
+                <h4>Description</h4>
               </div>
               <p className="text-gray-600 leading-relaxed pl-7">
                 {selectedPost.description}
@@ -612,19 +519,54 @@ export default function Home() {
             </div>
 
             {/* Duration */}
-            <div className="flex items-center gap-3 bg-gradient-to-r from-blue-500/5 to-orange-500/10 p-4 rounded-lg border border-blue-500/20">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center">
-                <Clock className="w-5 h-5 text-blue-600" />
+            <div className="flex items-center gap-3 bg-gradient-to-r from-primary/5 to-orange-500/10 p-4 rounded-lg border border-primary/20">
+              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                <Clock className="w-5 h-5 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">
-                  Tahmini Süre
+                  Estimated Duration
                 </p>
-                <p className="font-medium text-blue-600">
+                <p className="font-medium text-primary">
                   {selectedPost.duration}
                 </p>
               </div>
             </div>
+
+            {/* Service Details */}
+            {(selectedPost.frequency || selectedPost.participantCount) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {selectedPost.frequency && (
+                  <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                      <RefreshCw className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Frequency</p>
+                      <p className="text-sm font-medium text-gray-700">
+                        {selectedPost.frequency === 'one-time' ? 'One-time' : 
+                         selectedPost.frequency === 'weekly' ? 'Weekly' : 
+                         selectedPost.frequency === 'monthly' ? 'Monthly' : 
+                         selectedPost.frequency}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {selectedPost.participantCount && (
+                  <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Users className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Participants</p>
+                      <p className="text-sm font-medium text-gray-700">
+                        {selectedPost.participantCount} {selectedPost.participantCount === 1 ? 'person' : 'people'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <Separator />
 
@@ -635,7 +577,7 @@ export default function Home() {
                 size="lg"
                 onClick={() => {
                   console.log(
-                    "İstek gönderildi:",
+                    "Request sent:",
                     selectedPost.title,
                   );
                   setIsDialogOpen(false);
@@ -643,8 +585,8 @@ export default function Home() {
               >
                 <Send className="w-4 h-4 mr-2" />
                 {selectedPost.type === "offer"
-                  ? "Hizmet Talep Et"
-                  : "Yardım Teklif Et"}
+                  ? "Request Service"
+                  : "Offer Help"}
               </Button>
               <Button
                 variant="outline"
@@ -652,15 +594,15 @@ export default function Home() {
                 className="flex-1 border-gray-300"
                 onClick={() => {
                   console.log(
-                    "Mesaj gönder:",
+                    "Send message:",
                     selectedPost.postedBy,
                   );
                 }}
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
-                Mesaj Gönder
+                Send Message
               </Button>
-              {/* Düzenle Butonu (Link olarak) */}
+              {/* Edit Button (as Link) */}
               <Link to={`/post/edit/${selectedPost.id}`} className="flex-1">
                 <Button
                   variant="outline"
@@ -668,13 +610,13 @@ export default function Home() {
                   className="w-full border-yellow-500/30 hover:bg-yellow-500/5 text-yellow-600"
                 >
                   <Pencil className="w-4 h-4 mr-2" />
-                  Düzenle
+                  Edit
                 </Button>
               </Link>
             </div>
           </>
         )}
-      </Dialog>
+      </SimpleDialog>
     </div>
   );
 }

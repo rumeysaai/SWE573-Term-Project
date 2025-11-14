@@ -83,25 +83,63 @@ class PostSerializer(serializers.ModelSerializer):
     postedBy = serializers.CharField(source='posted_by.username', read_only=True)
     avatar = serializers.URLField(source='posted_by.profile.avatar', read_only=True)
     
-    # 'tags' alanını ID listesi yerine 'name' listesi (["Gardening", "Music"]) olarak göster
-    tags = serializers.StringRelatedField(many=True, read_only=True)
+    # 'tags' alanı: Write için ID listesi alır, Read için name listesi döner
+    # PrimaryKeyRelatedField ile write, SerializerMethodField ile read yapacağız
+    tags = serializers.SerializerMethodField()
+    
+    # Write için tags_ids alanı
+    tags_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Tag.objects.all(),
+        required=False,
+        write_only=True,
+        source='tags'
+    )
+    
+    def get_tags(self, obj):
+        """Response'da tags'i name listesi olarak döndür"""
+        return [tag.name for tag in obj.tags.all()]
     
     # 'postedDate' alanını 'created_at' olarak yeniden adlandır
     postedDate = serializers.DateTimeField(source='created_at', read_only=True)
+    
+    def create(self, validated_data):
+        """Create işleminde tags'i manuel olarak işle"""
+        # tags_ids alanı source='tags' ile işaretlendiği için validated_data'da 'tags' olarak gelecek
+        tags_data = validated_data.pop('tags', [])
+        post = Post.objects.create(**validated_data)
+        if tags_data:
+            post.tags.set(tags_data)
+        return post
+    
+    def update(self, instance, validated_data):
+        """Update işleminde tags'i manuel olarak işle"""
+        
+        tags_data = validated_data.pop('tags', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if tags_data is not None:
+            instance.tags.set(tags_data)
+        return instance
 
 
     class Meta:
         model = Post
-        # 'fields' listesi, API'nin döndüreceği JSON alanlarıdır
+        
         fields = [
             'id',
             'title',
-            'tags',
+            'tags',        
+            'tags_ids',   
             'location',
-            'post_type', # Frontend 'type' bekliyor, bunu FE'de map'leyeceğiz
+            'post_type', 
             'description',
             'duration',
-            'postedBy',   # Türetilmiş alan
-            'avatar',     # Türetilmiş alan
-            'postedDate', # Yeniden adlandırılmış alan
+            'frequency',
+            'participant_count',
+            'date',
+            'postedBy',   
+            'avatar',     
+            'postedDate', 
         ]
