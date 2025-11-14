@@ -1,11 +1,11 @@
 
 services:
-  # Veritabanı Servisi (PostgreSQL)
+  # Database Service (PostgreSQL)
   db:
     image: postgres:latest
     volumes:
       - postgres_data:/var/lib/postgresql
-    # 2. .env dosyasındaki değişkenleri buraya bağlayın
+    # 2. Bind variables from .env file here
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -18,17 +18,17 @@ services:
     networks:
       - internal_bridge
 
-  # Backend Servisi (Django)
+  # Backend Service (Django)
   backend:
     build: ./backend
     networks:
-      - internal_bridge # EKLE: Frontend'in backend'i bu isimle görmesi için
-      # - dokploy-network # EKLE: Traefik ile iletişim için (commented out for local testing)
+      - internal_bridge # ADD: For frontend to see backend with this name
+      - dokploy-network # ADD: For communication with Traefik
     env_file: .env
     volumes:
-      - ./backend:/app # Kodu konteynere bağla (geliştirme için)
+      - ./backend:/app # Bind code to container (for development)
     environment:
-      # 3. Django'nun doğru host'a (db) bağlanmasını sağlayın
+      # 3. Ensure Django connects to the correct host (db)
       DB_HOST: db
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -41,7 +41,7 @@ services:
       sh -c "python manage.py migrate &&
              gunicorn the_hive.wsgi:application --bind 0.0.0.0:8000"
 
-  # Frontend Servisi (React + Nginx)
+  # Frontend Service (React + Nginx)
   frontend:
     build: ./frontend
     ports:
@@ -49,14 +49,14 @@ services:
     depends_on:
       - backend
     networks:
-      - internal_bridge # EKLE: Backend'i görebilmesi için KRİTİK!
-      # - dokploy-network # EKLE: Traefik ile iletişim için (commented out for local testing) 
+      - internal_bridge # ADD: CRITICAL for frontend to see backend!
+      - dokploy-network # ADD: For communication with Traefik 
 
 volumes:
   postgres_data: {}
 
 networks:
-  # dokploy-network:  # Dokploy'un Traefik Ağı (Dışarıdan erişim ve SSL) - commented out for local testing
-  #   external: true
-  internal_bridge:  # Servislerin birbirini görmesi için özel bir ağ
+  dokploy-network:  # Dokploy's Traefik Network (External access and SSL)
+    external: true
+  internal_bridge:  # Private network for services to see each other
     driver: bridge
