@@ -23,7 +23,7 @@ services:
     build: ./backend
     networks:
       - internal_bridge # EKLE: Frontend'in backend'i bu isimle görmesi için
-      - dokploy-network # EKLE: Traefik ile iletişim için
+      # - dokploy-network # EKLE: Traefik ile iletişim için (commented out for local testing)
     env_file: .env
     volumes:
       - ./backend:/app # Kodu konteynere bağla (geliştirme için)
@@ -44,20 +44,19 @@ services:
   # Frontend Servisi (React + Nginx)
   frontend:
     build: ./frontend
-    # container_name: react_frontend
-    # ports:
-    #   - "3001:81" 
+    ports:
+      - "3000:80"
     depends_on:
       - backend
     networks:
       - internal_bridge # EKLE: Backend'i görebilmesi için KRİTİK!
-      - dokploy-network # EKLE: Traefik ile iletişim için 
+      # - dokploy-network # EKLE: Traefik ile iletişim için (commented out for local testing) 
 
 volumes:
   postgres_data: {}
 
 networks:
-  dokploy-network:  # Dokploy'un Traefik Ağı (Dışarıdan erişim ve SSL)
-    external: true
+  # dokploy-network:  # Dokploy'un Traefik Ağı (Dışarıdan erişim ve SSL) - commented out for local testing
+  #   external: true
   internal_bridge:  # Servislerin birbirini görmesi için özel bir ağ
     driver: bridge

@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-// Removed imports for custom UI components as they are not available
-// in this environment. Will use standard HTML elements with Tailwind.
 
 import { 
   ArrowLeft, 
@@ -14,124 +12,19 @@ import {
   TrendingUp,
   TrendingDown
 } from 'lucide-react';
-// Removed toast import, will use console.log
 
-// Mock current user data (as it was imported in the original file)
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
+import { Badge } from '../components/ui/badge';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Label } from '../components/ui/label';
+import { Separator } from '../components/ui/separator';
+
 const currentUser = {
   id: 'user-1',
   userName: 'Alex Johnson',
 };
-
-// Interface definition for a Proposal
-// Removed TypeScript interface
-/*
-interface Proposal {
-  id:string;
-  fromUserId: string;
-  fromUserName: string;
-  hours: number;
-  date: string;
-  time: string;
-  location: string;
-  notes: string;
-  timestamp: Date;
-  status: 'pending' | 'accepted' | 'rejected' | 'countered';
-}
-*/
-
-// Helper components to mimic shadcn/ui with standard elements
-const Button = ({ variant = 'default', className = '', children, ...props }) => {
-  const baseStyle = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 px-4 py-2 shadow-md";
-  
-  let variantStyle = '';
-  switch (variant) {
-    case 'destructive':
-      variantStyle = 'bg-red-600 text-white hover:bg-red-600/90';
-      break;
-    case 'outline':
-      variantStyle = 'border border-input bg-background hover:bg-accent hover:text-accent-foreground border-primary/30';
-      break;
-    default:
-      variantStyle = 'bg-primary text-primary-foreground hover:bg-primary/90 bg-slate-900 text-white hover:bg-slate-900/90';
-  }
-  
-  return (
-    <button className={`${baseStyle} ${variantStyle} ${className}`} {...props}>
-      {children}
-    </button>
-  );
-};
-
-const Input = ({ className = '', ...props }) => (
-  <input 
-    className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-primary/20 focus:border-primary ${className}`} 
-    {...props} 
-  />
-);
-
-const Textarea = ({ className = '', ...props }) => (
-  <textarea 
-    className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-primary/20 focus:border-primary ${className}`} 
-    {...props} 
-  />
-);
-
-const Badge = ({ variant = 'default', className = '', children }) => {
-  const baseStyle = "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
-  
-  let variantStyle = '';
-  switch (variant) {
-    case 'secondary':
-      variantStyle = 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 bg-slate-100 text-slate-900';
-      break;
-    case 'destructive':
-      variantStyle = 'border-transparent bg-red-600 text-white hover:bg-red-600/80';
-      break;
-    case 'outline':
-      variantStyle = 'text-foreground';
-      break;
-    default:
-      variantStyle = 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80 bg-slate-900 text-white';
-  }
-
-  return (
-    <div className={`${baseStyle} ${variantStyle} ${className}`}>
-      {children}
-    </div>
-  );
-};
-
-const Card = ({ className = '', children }) => (
-  <div className={`rounded-lg border bg-card text-card-foreground shadow-sm border-primary/20 ${className}`}>
-    {children}
-  </div>
-);
-
-const CardHeader = ({ className = '', children }) => (
-  <div className={`flex flex-col space-y-1.5 p-6 bg-gradient-to-r from-primary/5 to-secondary/20 ${className}`}>
-    {children}
-  </div>
-);
-
-const CardTitle = ({ className = '', children }) => (
-  <h3 className={`text-lg font-semibold leading-none tracking-tight ${className}`}>
-    {children}
-  </h3>
-);
-
-const CardContent = ({ className = '', children }) => (
-  <div className={`p-6 ${className}`}>
-    {children}
-  </div>
-);
-
-const Label = ({ className = '', ...props }) => (
-  <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`} {...props} />
-);
-
-const Separator = ({ className = '' }) => (
-  <hr className={`shrink-0 bg-border h-[1px] w-full bg-primary/20 ${className}`} />
-);
 
 
 export default function Negotiation() {
@@ -171,7 +64,6 @@ export default function Negotiation() {
     notes: '',
   });
 
-  // Mock data for the post being negotiated
   const postDetails = {
     title: 'Language Tutoring (Spanish)',
     type: 'offer',
@@ -202,7 +94,6 @@ export default function Negotiation() {
       status: 'countered',
     };
 
-    // Mark previous proposals as countered
     const updatedProposals = proposals.map(p => 
       p.status === 'pending' ? { ...p, status: 'countered' } : p
     );
@@ -236,7 +127,7 @@ export default function Negotiation() {
             <MessageCircle className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-primary text-slate-900 font-semibold">Negotiation: {postDetails.title}</h2>
+            <h2 className="text-primary text-slate-900 font-normal">Negotiation: {postDetails.title}</h2>
             <p className="text-muted-foreground text-sm text-slate-600">
               Negotiating with {postDetails.owner}
             </p>
@@ -244,8 +135,8 @@ export default function Negotiation() {
         </div>
 
         {/* Post Summary */}
-        <Card className="shadow-md">
-          <CardHeader>
+        <Card className="shadow-md border-primary/20">
+          <CardHeader className="bg-gradient-to-r from-primary/5 to-secondary/20">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <CardTitle className="text-primary text-slate-900">{postDetails.title}</CardTitle>
@@ -280,11 +171,11 @@ export default function Negotiation() {
         <div className="grid md:grid-cols-2 gap-6">
           {/* Current/Pending Proposal */}
           {pendingProposal && (
-            <Card className="border-accent shadow-md border-blue-400">
-              <CardHeader className="bg-gradient-to-r from-accent/10 to-secondary/20 from-blue-500/10 to-slate-100/20">
+            <Card className="border-accent shadow-md border-primary">
+              <CardHeader className="bg-gradient-to-r from-accent/10 to-secondary/20 from-primary/10 to-slate-100/20">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-accent text-blue-500" />
-                  <CardTitle className="text-accent text-blue-500">Pending Proposal</CardTitle>
+                  <TrendingUp className="w-5 h-5 text-accent text-primary" />
+                  <CardTitle className="text-accent text-primary">Pending Proposal</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
@@ -367,7 +258,7 @@ export default function Negotiation() {
           )}
 
           {/* New Proposal Form */}
-          <Card className={`shadow-md ${!pendingProposal ? 'md:col-span-2' : ''}`}>
+          <Card className={`shadow-md border-primary/20 ${!pendingProposal ? 'md:col-span-2' : ''}`}>
             <CardHeader>
               <CardTitle className="text-primary text-slate-900">
                 {pendingProposal ? 'Send Counter-Offer' : 'Create New Proposal'}
@@ -464,7 +355,7 @@ export default function Negotiation() {
         </div>
 
         {/* Proposal History */}
-        <Card className="shadow-md">
+        <Card className="shadow-md border-primary/20">
           <CardHeader>
             <div className="flex items-center gap-2">
               <TrendingDown className="w-5 h-5 text-primary text-slate-900" />
@@ -518,7 +409,7 @@ export default function Negotiation() {
                           }
                           className={
                             proposal.status === 'pending'
-                              ? 'bg-accent text-accent-foreground border-accent bg-blue-500 text-white border-blue-500'
+                              ? 'bg-accent text-accent-foreground border-accent bg-primary text-white border-primary'
                               : proposal.status === 'countered'
                               ? 'bg-muted text-muted-foreground bg-slate-200 text-slate-600'
                               : proposal.status === 'accepted'

@@ -10,6 +10,7 @@ import Post from './pages/Post';
 import Negotiation from './pages/Negotiation';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Profile from './pages/Profile';
 
 function LoadingSpinner() {
   return (
@@ -141,6 +142,10 @@ export default function App() {
           <Route
             path="/negotiate/:postId"
             element={<ProtectedRoute><Negotiation /></ProtectedRoute>}
+          />
+          <Route
+            path="/profile"
+            element={<ProtectedRoute><Profile /></ProtectedRoute>}
           />
           
           <Route path="*" element={<Navigate to="/" />} />

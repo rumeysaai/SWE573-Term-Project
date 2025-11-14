@@ -93,7 +93,7 @@ export default function Signup() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-secondary rounded-2xl mb-4">
               <Leaf className="w-8 h-8 text-secondary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold mb-1">Join The Hive</h1>
+            <h1 className="text-2xl font-normal mb-1">Join The Hive</h1>
             <p className="text-slate-600">Create a Community TimeBank Account</p>
           </CardHeader>
   
@@ -158,7 +158,7 @@ export default function Signup() {
                 htmlFor="terms"
                 className="text-sm text-slate-600 leading-tight cursor-pointer"
               >
-                {/* 'href=#' yerine 'Link to' kullanıldı */}
+                
                 <Link to="/terms" className="text-primary hover:underline">
                   Community Rules
                 </Link>{' '}
@@ -172,7 +172,7 @@ export default function Signup() {
   
             <div className="text-center text-sm text-slate-600">
               Already have an account?{' '}
-              {/* 'href=#' yerine 'Link to' kullanıldı */}
+              
               <Link to="/login" className="text-primary hover:underline font-medium">
                 Sign In
               </Link>

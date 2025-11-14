@@ -27,37 +27,36 @@ import {
 } from '../components/ui/select';
 
 export default function Post() {
-  const { id } = useParams(); // URL'den /:id'yi alır
-  const isEditing = Boolean(id); // ID varsa, düzenleme modundayız
+  const { id } = useParams();
+  const isEditing = Boolean(id); 
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Backend API'ye uygun state yapısı
+
   const [post, setPost] = useState({
     title: '',
     description: '',
     post_type: 'offer',
     location: '',
-    duration: '', // Backend string bekliyor
-    tags: [] // Backend ID listesi bekliyor
+    duration: '', 
+    tags: [] 
   });
 
-  // UI için ekstra state'ler (backend'de yok, sadece UI için)
+
   const [estimatedHours, setEstimatedHours] = useState(3);
   const [date, setDate] = useState('');
   const [participantCount, setParticipantCount] = useState(1);
   const [frequency, setFrequency] = useState('one-time');
   const [isGroupActivity, setIsGroupActivity] = useState(false);
 
-  const [allTags, setAllTags] = useState([]); // Tüm etiketleri çekmek için
-  const [selectedTagIds, setSelectedTagIds] = useState([]); // Seçilen tag ID'leri
-  const [tagInput, setTagInput] = useState(''); // Tag input için
+  const [allTags, setAllTags] = useState([]); 
+  const [selectedTagIds, setSelectedTagIds] = useState([]);
+  const [tagInput, setTagInput] = useState(''); 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Düzenleme modundaysak, mevcut ilanın verilerini çek
   useEffect(() => {
-    // Etiketleri her zaman çek
+    
     api.get('/tags/')
       .then(res => setAllTags(res.data))
       .catch(err => console.error("Etiketler çekilemedi:", err));
@@ -66,27 +65,22 @@ export default function Post() {
       setLoading(true);
       api.get(`/posts/${id}/`)
         .then(response => {
-          // Backend'den gelen veriyi form state'ine set et
           const { title, description, post_type, location, duration, tags, frequency, participant_count, date } = response.data;
           
-          // Tags string array olarak geliyor, önce string olarak sakla
-          // Sonra allTags yüklendiğinde ID'lere çevrilecek
           setPost({ 
             title, 
             description, 
             post_type, 
             location, 
             duration,
-            tags: tags // Geçici olarak string array olarak sakla
+            tags: tags 
           });
           
-          // Duration'dan estimatedHours'ı parse et (örn: "3 hours" -> 3)
           const hoursMatch = duration.match(/(\d+)/);
           if (hoursMatch) {
             setEstimatedHours(parseInt(hoursMatch[1]));
           }
           
-          // Ekstra alanları set et
           if (frequency) setFrequency(frequency);
           if (participant_count) setParticipantCount(participant_count);
           if (date) setDate(date);
@@ -101,7 +95,6 @@ export default function Post() {
     }
   }, [id, isEditing]);
 
-  // allTags yüklendiğinde ve post.tags string array ise, ID'lere çevir
   useEffect(() => {
     if (allTags.length > 0 && isEditing && Array.isArray(post.tags) && post.tags.length > 0 && typeof post.tags[0] === 'string') {
       const tagIds = post.tags.map(tagName => {
@@ -114,20 +107,20 @@ export default function Post() {
     }
   }, [allTags, isEditing, post.tags]);
 
-  // Tag ekleme (Input'tan tag ekleme)
+
   const handleAddTag = async () => {
     if (tagInput.trim()) {
-      // Önce mevcut tag'lerde var mı kontrol et
+      
       const existingTag = allTags.find(t => t.name.toLowerCase() === tagInput.trim().toLowerCase());
       
       if (existingTag) {
-        // Tag zaten varsa, ID'sini ekle
+       
         if (!selectedTagIds.includes(existingTag.id)) {
           setSelectedTagIds([...selectedTagIds, existingTag.id]);
           setPost(prev => ({ ...prev, tags: [...prev.tags, existingTag.id] }));
         }
       } else {
-        // Yeni tag oluştur
+       
         try {
           const response = await api.post('/tags/', { name: tagInput.trim() });
           const newTag = response.data;
@@ -143,7 +136,6 @@ export default function Post() {
     }
   };
 
-  // Tag kaldırma
   const handleRemoveTag = (tagIdToRemove) => {
     setSelectedTagIds(selectedTagIds.filter(id => id !== tagIdToRemove));
     setPost(prev => ({ 
@@ -152,13 +144,11 @@ export default function Post() {
     }));
   };
 
-  // Formu gönder (Oluştur veya Güncelle)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    // estimatedHours'ı duration string'ine çevir
     const durationString = `${estimatedHours} hours`;
 
     const dataToSend = {
@@ -167,32 +157,30 @@ export default function Post() {
       post_type: post.post_type,
       location: post.location,
       duration: durationString,
-      tags_ids: post.tags, // Seçilen etiket ID'lerinin listesi [1, 2]
+      tags_ids: post.tags, 
       frequency: frequency || null,
       participant_count: participantCount || null,
       date: date || null,
-      // posted_by backend'de perform_create'de otomatik atanıyor, göndermemize gerek yok
     };
 
     try {
       if (isEditing) {
-        // Düzenleme -> PUT isteği
+       
         await api.put(`/posts/${id}/`, dataToSend);
         toast.success('İlan başarıyla güncellendi!');
       } else {
-        // Yeni -> POST isteği
+   
         await api.post('/posts/', dataToSend);
         toast.success('İlan başarıyla yayınlandı!');
       }
       setLoading(false);
-      navigate("/"); // Başarılı olunca ana sayfaya dön
+      navigate("/"); 
     } catch (err) {
       console.error("İlan kaydedilemedi:", err.response ? err.response.data : err);
       
       let errorMsg = "İlan kaydedilirken bir hata oluştu. Lütfen tüm alanları kontrol edin.";
       
       if (err.response && err.response.data) {
-        // Hata HTML olarak geldiyse (Django'nun debug sayfası)
         if (typeof err.response.data === 'string' && err.response.data.includes('IntegrityError')) {
           if (err.response.data.includes('posted_by_id')) {
             errorMsg = "Backend Hatası: 'posted_by_id' alanı boş bırakılamaz.";
@@ -200,7 +188,6 @@ export default function Post() {
             errorMsg = "Backend Bütünlük Hatası (IntegrityError)";
           }
         } 
-        // Hata JSON olarak geldiyse (DRF'in normal validation hatası)
         else if (typeof err.response.data === 'object') {
           const errors = err.response.data;
           const messages = Object.keys(errors).map(key => {
@@ -220,13 +207,12 @@ export default function Post() {
   if (loading && isEditing) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
         <p className="ml-4 text-lg text-gray-700">İlan Yükleniyor...</p>
       </div>
     );
   }
 
-  // Seçili tag'lerin isimlerini al (ID'ye göre eşleştir)
   const getTagNameById = (tagId) => {
     const tag = allTags.find(t => t.id === tagId);
     return tag ? tag.name : '';
@@ -237,11 +223,11 @@ export default function Post() {
       <div className="container mx-auto px-4 max-w-3xl">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-md">
+          <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-md">
             <PenLine className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-blue-600 font-bold text-lg">{isEditing ? 'Edit Post' : 'Create Post'}</h1>
+            <h1 className="text-primary font-normal text-lg">{isEditing ? 'Edit Post' : 'Create Post'}</h1>
             <p className="text-xs text-gray-500">Fill in the details for your offer or need</p>
           </div>
         </div>
@@ -263,16 +249,16 @@ export default function Post() {
                   onClick={() => setPost({ ...post, post_type: 'offer' })}
                   className={`w-full flex items-center justify-between px-3 py-3 rounded-lg border transition-all ${
                     post.post_type === 'offer'
-                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
-                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                      : 'border-primary/20 bg-white hover:border-primary/50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      post.post_type === 'offer' ? 'border-blue-600' : 'border-gray-400'
+                      post.post_type === 'offer' ? 'border-primary' : 'border-gray-400'
                     }`}>
                       {post.post_type === 'offer' && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                       )}
                     </div>
                     <span className="text-sm">Offer - I can provide this service</span>
@@ -284,16 +270,16 @@ export default function Post() {
                   onClick={() => setPost({ ...post, post_type: 'need' })}
                   className={`w-full flex items-center justify-between px-3 py-3 rounded-lg border transition-all ${
                     post.post_type === 'need'
-                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
-                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                      : 'border-primary/20 bg-white hover:border-primary/50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      post.post_type === 'need' ? 'border-blue-600' : 'border-gray-400'
+                      post.post_type === 'need' ? 'border-primary' : 'border-gray-400'
                     }`}>
                       {post.post_type === 'need' && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                       )}
                     </div>
                     <span className="text-sm">Need - I'm looking for this service</span>
@@ -310,7 +296,7 @@ export default function Post() {
                 placeholder="Enter post title"
                 value={post.title}
                 onChange={(e) => setPost({ ...post, title: e.target.value })}
-                className="h-10 text-sm border-blue-500/20"
+                className="h-10 text-sm border-primary/20"
               />
             </div>
 
@@ -323,7 +309,7 @@ export default function Post() {
                 rows={4}
                 value={post.description}
                 onChange={(e) => setPost({ ...post, description: e.target.value })}
-                className="text-sm border-blue-500/20 resize-none"
+                className="text-sm border-primary/20 resize-none"
               />
             </div>
 
@@ -341,7 +327,7 @@ export default function Post() {
                       handleAddTag();
                     }
                   }}
-                  className="h-10 text-sm border-blue-500/20"
+                  className="h-10 text-sm border-primary/20"
                 />
                 <Button 
                   type="button" 
@@ -382,7 +368,7 @@ export default function Post() {
               {/* Duration */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-blue-600" />
+                  <Clock className="w-4 h-4 text-primary" />
                   Duration (Hours)
                 </Label>
                 <Input
@@ -392,28 +378,28 @@ export default function Post() {
                   required
                   value={estimatedHours}
                   onChange={(e) => setEstimatedHours(parseFloat(e.target.value) || 0)}
-                  className="h-10 text-sm border-blue-500/20"
+                  className="h-10 text-sm border-primary/20"
                 />
               </div>
 
               {/* Date */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <CalendarIcon className="w-4 h-4 text-blue-600" />
+                  <CalendarIcon className="w-4 h-4 text-primary" />
                   Date
                 </Label>
                 <Input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="h-10 text-sm border-blue-500/20"
+                  className="h-10 text-sm border-primary/20"
                 />
               </div>
 
               {/* Participants Count */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-600" />
+                  <Users className="w-4 h-4 text-primary" />
                   Participants Count
                 </Label>
                 <div className="space-y-2">
@@ -422,7 +408,7 @@ export default function Post() {
                     min="1"
                     value={participantCount}
                     onChange={(e) => setParticipantCount(parseInt(e.target.value) || 1)}
-                    className="h-10 text-sm border-blue-500/20"
+                    className="h-10 text-sm border-primary/20"
                   />
                   <div className="flex items-center gap-2">
                     <input
@@ -430,7 +416,7 @@ export default function Post() {
                       type="checkbox"
                       checked={isGroupActivity}
                       onChange={(e) => setIsGroupActivity(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
                     />
                     <label htmlFor="group-activity" className="text-xs text-gray-500">
                       Group Activity
@@ -443,7 +429,7 @@ export default function Post() {
             {/* Service Frequency */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 text-blue-600" />
+                <RefreshCw className="w-4 h-4 text-primary" />
                 Service Frequency
               </Label>
               <div className="grid grid-cols-3 gap-2">
@@ -452,16 +438,16 @@ export default function Post() {
                   onClick={() => setFrequency('one-time')}
                   className={`px-3 py-2 rounded-lg border transition-all ${
                     frequency === 'one-time'
-                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
-                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                      : 'border-primary/20 bg-white hover:border-primary/50'
                   }`}
                 >
                   <div className="flex items-center gap-2 justify-center">
                     <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
-                      frequency === 'one-time' ? 'border-blue-600' : 'border-gray-400'
+                      frequency === 'one-time' ? 'border-primary' : 'border-gray-400'
                     }`}>
                       {frequency === 'one-time' && (
-                        <div className="w-2 h-2 rounded-full bg-blue-600" />
+                        <div className="w-2 h-2 rounded-full bg-primary" />
                       )}
                     </div>
                     <span className="text-xs">One-time</span>
@@ -473,16 +459,16 @@ export default function Post() {
                   onClick={() => setFrequency('weekly')}
                   className={`px-3 py-2 rounded-lg border transition-all ${
                     frequency === 'weekly'
-                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
-                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                      : 'border-primary/20 bg-white hover:border-primary/50'
                   }`}
                 >
                   <div className="flex items-center gap-2 justify-center">
                     <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
-                      frequency === 'weekly' ? 'border-blue-600' : 'border-gray-400'
+                      frequency === 'weekly' ? 'border-primary' : 'border-gray-400'
                     }`}>
                       {frequency === 'weekly' && (
-                        <div className="w-2 h-2 rounded-full bg-blue-600" />
+                        <div className="w-2 h-2 rounded-full bg-primary" />
                       )}
                     </div>
                     <span className="text-xs">Weekly</span>
@@ -494,16 +480,16 @@ export default function Post() {
                   onClick={() => setFrequency('monthly')}
                   className={`px-3 py-2 rounded-lg border transition-all ${
                     frequency === 'monthly'
-                      ? 'border-blue-600 bg-blue-600/5 ring-2 ring-blue-600/20'
-                      : 'border-blue-500/20 bg-white hover:border-blue-500/50'
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                      : 'border-primary/20 bg-white hover:border-primary/50'
                   }`}
                 >
                   <div className="flex items-center gap-2 justify-center">
                     <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
-                      frequency === 'monthly' ? 'border-blue-600' : 'border-gray-400'
+                      frequency === 'monthly' ? 'border-primary' : 'border-gray-400'
                     }`}>
                       {frequency === 'monthly' && (
-                        <div className="w-2 h-2 rounded-full bg-blue-600" />
+                        <div className="w-2 h-2 rounded-full bg-primary" />
                       )}
                     </div>
                     <span className="text-xs">Monthly</span>
@@ -519,7 +505,7 @@ export default function Post() {
                 value={post.location} 
                 onValueChange={(value) => setPost({ ...post, location: value })}
               >
-                <SelectTrigger className="h-10 text-sm border-blue-500/20">
+                <SelectTrigger className="h-10 text-sm border-primary/20">
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>

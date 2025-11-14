@@ -45,10 +45,10 @@ export default function Login() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-md p-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-2xl mb-4 text-blue-600">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-2xl mb-4 text-primary">
               <span className="text-3xl">🐝</span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">The Hive</h1>
+            <h1 className="text-2xl font-normal text-gray-900 mb-2">The Hive</h1>
             <p className="text-sm text-gray-500">Community TimeBank Platform</p>
           </div>
   
@@ -82,13 +82,13 @@ export default function Login() {
             </Button>
   
             <div className="text-center space-y-3 text-sm">
-              <a href="#" className="text-blue-600 hover:text-blue-700 block transition-colors duration-150">
+              <a href="#" className="text-primary hover:text-primary block transition-colors duration-150">
                 Forgot Password
               </a>
               
               <div className="text-gray-500">
                 Don't have an account?{' '}
-                <Link to="/register" className="text-blue-600 hover:text-blue-700 transition-colors duration-150">
+                <Link to="/register" className="text-primary hover:text-primary transition-colors duration-150">
                   Sign Up
                 </Link>
               </div>

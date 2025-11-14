@@ -114,7 +114,7 @@ class PostSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         """Update işleminde tags'i manuel olarak işle"""
-        # tags_ids alanı source='tags' ile işaretlendiği için validated_data'da 'tags' olarak gelecek
+        
         tags_data = validated_data.pop('tags', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -126,20 +126,20 @@ class PostSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Post
-        # 'fields' listesi, API'nin döndüreceği JSON alanlarıdır
+        
         fields = [
             'id',
             'title',
-            'tags',        # Read için: Name listesi
-            'tags_ids',   # Write için: ID listesi (write_only=True)
+            'tags',        
+            'tags_ids',   
             'location',
-            'post_type', # Frontend 'type' bekliyor, bunu FE'de map'leyeceğiz
+            'post_type', 
             'description',
             'duration',
             'frequency',
             'participant_count',
             'date',
-            'postedBy',   # Türetilmiş alan
-            'avatar',     # Türetilmiş alan
-            'postedDate', # Yeniden adlandırılmış alan
+            'postedBy',   
+            'avatar',     
+            'postedDate', 
         ]

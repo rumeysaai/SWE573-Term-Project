@@ -23,7 +23,7 @@ export const SimpleTabs = ({ defaultValue, onValueChange, children }) => {
 };
 
 export const SimpleTabsList = ({ children, className = "", activeTab, onTabChange }) => (
-  <div className={`w-full flex rounded-md bg-gray-200/50 border border-blue-500/20 p-1 ${className}`}>
+  <div className={`w-full flex rounded-md bg-gray-200/50 border border-primary/20 p-1 ${className}`}>
     {React.Children.map(children, (child) => {
       if (!child) return null; // Null çocukları atla
       return React.cloneElement(child, {
@@ -35,8 +35,11 @@ export const SimpleTabsList = ({ children, className = "", activeTab, onTabChang
 );
 
 export const SimpleTabsTrigger = ({ children, className = "", value, isActive, onClick }) => {
-  // İhtiyaçlar butonu için turuncu, teklifler için mavi
-  const activeClasses = value === "needs" ? "bg-orange-500 text-white" : "bg-blue-600 text-white";
+  // İhtiyaçlar/received için turuncu, teklifler/provided/history için mavi
+  let activeClasses = "bg-[#2A77EB] text-white";
+  if (value === "needs" || value === "received") {
+    activeClasses = "bg-orange-500 text-white";
+  }
   const inactiveClasses = "hover:bg-gray-100";
   return (
     <button
