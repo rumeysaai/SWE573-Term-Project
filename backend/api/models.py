@@ -80,7 +80,7 @@ class Request(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        unique_together = [['post', 'requester']]  # Bir kullanıcı aynı post'a sadece bir kez başvurabilir
+        unique_together = [['post', 'requester']]  
 
     def __str__(self):
         return f"{self.requester.username} -> {self.post.title} ({self.status})"

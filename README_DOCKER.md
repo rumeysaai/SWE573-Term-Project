@@ -157,10 +157,10 @@ docker-compose up -d
 
 ### Database Bağlantı Hatası
 ```bash
-# Database container'ının çalıştığını kontrol edin
+
 docker-compose ps db
 
-# Database loglarını kontrol edin
+
 docker-compose logs db
 ```
 
