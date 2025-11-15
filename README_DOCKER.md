@@ -1,47 +1,47 @@
-# 🐳 Docker ile The Hive Projesini Çalıştırma
+# 🐳 Running The Hive Project with Docker
 
-## Hızlı Başlangıç
+## Quick Start
 
-### Development Ortamı
+### Development Environment
 
 ```bash
-# 1. Environment dosyasını oluşturun
+# 1. Create environment file
 cp .env.example .env
 
-# 2. .env dosyasını düzenleyin ve gerekli değerleri girin
+# 2. Edit .env file and enter required values
 
-# 3. Docker Compose ile başlatın
+# 3. Start with Docker Compose
 docker-compose up -d
 
-# 4. Logları takip edin
+# 4. Follow logs
 docker-compose logs -f
 ```
 
-Uygulama şu adreslerde çalışacak:
+The application will run at:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - Admin Panel: http://localhost:8000/admin
 
-### Production Ortamı
+### Production Environment
 
 ```bash
-# 1. Production environment dosyasını oluşturun
+# 1. Create production environment file
 cp .env.prod.example .env.prod
 
-# 2. .env.prod dosyasını düzenleyin
+# 2. Edit .env.prod file
 
-# 3. Docker Hub'dan image'ları çekin veya kendi image'larınızı build edin
-# (Detaylar için DOCKER_PUBLISH.md dosyasına bakın)
+# 3. Pull images from Docker Hub or build your own images
+# (See DOCKER_PUBLISH.md file for details)
 
-# 4. Production compose ile başlatın
+# 4. Start with production compose
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-## 📦 Docker Image'larını Publish Etme
+## 📦 Publishing Docker Images
 
-Detaylı bilgi için [DOCKER_PUBLISH.md](./DOCKER_PUBLISH.md) dosyasına bakın.
+For detailed information, see the [DOCKER_PUBLISH.md](./DOCKER_PUBLISH.md) file.
 
-### Hızlı Publish
+### Quick Publish
 
 **Linux/Mac:**
 ```bash
@@ -55,60 +55,60 @@ $env:DOCKER_USERNAME="your-username"
 .\scripts\publish.ps1 -Version 1.0.0
 ```
 
-## 🔧 Yaygın Komutlar
+## 🔧 Common Commands
 
-### Servisleri Durdurma
+### Stopping Services
 ```bash
 docker-compose down
 ```
 
-### Servisleri Yeniden Başlatma
+### Restarting Services
 ```bash
 docker-compose restart
 ```
 
-### Veritabanını Sıfırlama
+### Resetting Database
 ```bash
-docker-compose down -v  # Volume'ları da siler
+docker-compose down -v  # Also deletes volumes
 docker-compose up -d
 ```
 
-### Logları Görüntüleme
+### Viewing Logs
 ```bash
-# Tüm servisler
+# All services
 docker-compose logs -f
 
-# Sadece backend
+# Backend only
 docker-compose logs -f backend
 
-# Sadece frontend
+# Frontend only
 docker-compose logs -f frontend
 ```
 
-### Container'a Giriş Yapma
+### Accessing Container
 ```bash
-# Backend container'ına
+# Backend container
 docker-compose exec backend bash
 
-# Database container'ına
+# Database container
 docker-compose exec db psql -U the_hive_user -d the_hive_db
 ```
 
-### Django Komutlarını Çalıştırma
+### Running Django Commands
 ```bash
 # Migration
 docker-compose exec backend python manage.py migrate
 
-# Superuser oluşturma
+# Create superuser
 docker-compose exec backend python manage.py createsuperuser
 
 # Shell
 docker-compose exec backend python manage.py shell
 ```
 
-## 🏗️ Build İşlemleri
+## 🏗️ Build Operations
 
-### Manuel Build
+### Manual Build
 
 ```bash
 # Backend
@@ -124,17 +124,17 @@ cd ..
 
 ## 📊 Health Check
 
-Servislerin durumunu kontrol etmek için:
+To check the status of services:
 
 ```bash
 docker-compose ps
 ```
 
-## 🔍 Sorun Giderme
+## 🔍 Troubleshooting
 
-### Port Zaten Kullanılıyor
+### Port Already in Use
 ```bash
-# Port'u kullanan process'i bulun
+# Find process using the port
 # Linux/Mac
 lsof -i :3000
 lsof -i :8000
@@ -144,29 +144,25 @@ netstat -ano | findstr :3000
 netstat -ano | findstr :8000
 ```
 
-### Container Başlamıyor
+### Container Not Starting
 ```bash
-# Logları kontrol edin
+# Check logs
 docker-compose logs backend
 docker-compose logs frontend
 
-# Container'ı yeniden build edin
+# Rebuild container
 docker-compose build --no-cache
 docker-compose up -d
 ```
 
-### Database Bağlantı Hatası
+### Database Connection Error
 ```bash
-
 docker-compose ps db
-
-
 docker-compose logs db
 ```
 
-## 📚 Daha Fazla Bilgi
+## 📚 More Information
 
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
-- [Publish Rehberi](./DOCKER_PUBLISH.md)
-
+- [Publish Guide](./DOCKER_PUBLISH.md)
