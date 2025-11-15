@@ -11,3 +11,7 @@ __pycache__/
 # Django/DRF specific
 *.log
 .env
+
+# Documentation files
+DOCKER_PUBLISH.md
+README_DOCKER.md
