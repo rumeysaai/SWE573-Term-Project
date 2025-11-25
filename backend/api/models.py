@@ -7,6 +7,7 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     avatar = models.URLField(max_length=500, blank=True, null=True, default="https://placehold.co/100x100/EBF8FF/3B82F6?text=User")
     time_balance = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    interested_tags = models.ManyToManyField('Tag', blank=True, related_name='interested_profiles')
 
     def __str__(self):
         return f"{self.user.username}'s Profile"
@@ -19,7 +20,19 @@ def create_user_profile(sender, instance, created, **kwargs):
 
 
 class Tag(models.Model):
+    tag_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100, unique=True)
+    label = models.CharField(max_length=200, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    
+    def save(self, *args, **kwargs):
+        if not self.tag_id or self.tag_id == 0:
+            last_tag = Tag.objects.order_by('-tag_id').first()
+            if last_tag and last_tag.tag_id:
+                self.tag_id = last_tag.tag_id + 1
+            else:
+                self.tag_id = 1
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

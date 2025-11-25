@@ -39,10 +39,19 @@ class RegisterSerializer(serializers.ModelSerializer):
     # Parolayı doğrulamak için
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True, label="Parola Tekrarı")
+    
+    # interested_tags: tag_id ile eşleşecek
+    interested_tags = serializers.SlugRelatedField(
+        many=True,
+        queryset=Tag.objects.all(),
+        required=False,
+        write_only=True,
+        slug_field='tag_id'
+    )
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password2']
+        fields = ['username', 'email', 'password', 'password2', 'interested_tags']
 
     def validate(self, attrs):
         # 1. Parolalar eşleşiyor mu?
@@ -60,6 +69,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        # interested_tags'i validated_data'dan çıkar
+        interested_tags = validated_data.pop('interested_tags', [])
+        
         # create_user metodu parolayı otomatik olarak hash'ler (şifreler)
         user = User.objects.create_user(
             username=validated_data['username'],
@@ -70,6 +82,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         # ❗ BAŞLANGIÇ BONUSU
         # Sinyal, profili oluşturdu. Biz şimdi bonusu ekliyoruz.
         user.profile.time_balance = 5.0  # 5 saatlik bonus
+        
+        # interested_tags'i profile'a ekle
+        if interested_tags:
+            user.profile.interested_tags.set(interested_tags)
+        
         user.profile.save()
         
         return user
