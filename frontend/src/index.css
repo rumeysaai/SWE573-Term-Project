@@ -137,6 +137,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-color: rgb(var(--background));
+    color: rgb(var(--foreground));
+    min-height: 100vh;
+  }
+  html {
+    background-color: rgb(var(--background));
   }
 }
 
@@ -190,4 +196,23 @@
 
 html {
   font-size: var(--font-size);
+}
+
+/* Leaflet Map Styles */
+.leaflet-container {
+  font-family: inherit;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 0.5rem;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  padding: 0;
+}
+
+.custom-marker {
+  background: transparent !important;
+  border: none !important;
 }

@@ -38,6 +38,8 @@ export default function Post() {
     description: '',
     post_type: 'offer',
     location: '',
+    latitude: null,
+    longitude: null,
     duration: '', 
     tags: [] 
   });
@@ -54,6 +56,12 @@ export default function Post() {
   const [tagInput, setTagInput] = useState(''); 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Location autocomplete states
+  const [locationInput, setLocationInput] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => {
     
@@ -65,16 +73,20 @@ export default function Post() {
       setLoading(true);
       api.get(`/posts/${id}/`)
         .then(response => {
-          const { title, description, post_type, location, duration, tags, frequency, participant_count, date } = response.data;
+          const { title, description, post_type, location, duration, tags, frequency, participant_count, date, latitude, longitude } = response.data;
           
           setPost({ 
             title, 
             description, 
             post_type, 
             location, 
+            latitude: latitude || null,
+            longitude: longitude || null,
             duration,
             tags: tags 
           });
+          
+          setLocationInput(location || '');
           
           const hoursMatch = duration.match(/(\d+)/);
           if (hoursMatch) {
@@ -144,6 +156,57 @@ export default function Post() {
     }));
   };
 
+  // Location autocomplete functions
+  const searchLocation = async (query) => {
+    if (query.length < 3) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setLocationLoading(true);
+    try {
+      // OpenStreetMap Nominatim API - Global search 
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`
+      );
+      const data = await response.json();
+      
+      setLocationSuggestions(data);
+      setShowSuggestions(true);
+    } catch (err) {
+      console.error("Location search error:", err);
+      setLocationSuggestions([]);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const handleLocationInputChange = (e) => {
+    const value = e.target.value;
+    setLocationInput(value);
+    setPost(prev => ({ ...prev, location: value }));
+    
+    // Debounce için timeout
+    const timeoutId = setTimeout(() => {
+      searchLocation(value);
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
+  };
+
+  const handleLocationSelect = (suggestion) => {
+    setLocationInput(suggestion.display_name);
+    setPost(prev => ({
+      ...prev,
+      location: suggestion.display_name,
+      latitude: parseFloat(suggestion.lat),
+      longitude: parseFloat(suggestion.lon)
+    }));
+    setShowSuggestions(false);
+    setLocationSuggestions([]);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -156,6 +219,8 @@ export default function Post() {
       description: post.description,
       post_type: post.post_type,
       location: post.location,
+      latitude: post.latitude,
+      longitude: post.longitude,
       duration: durationString,
       tags_ids: post.tags, 
       frequency: frequency || null,
@@ -498,25 +563,57 @@ export default function Post() {
               </div>
             </div>
 
-            {/* Location */}
+            {/* Location with Autocomplete */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700">Location</Label>
-              <Select 
-                value={post.location} 
-                onValueChange={(value) => setPost({ ...post, location: value })}
-              >
-                <SelectTrigger className="h-10 text-sm border-primary/20">
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Kadıköy">Kadıköy</SelectItem>
-                  <SelectItem value="Beşiktaş">Beşiktaş</SelectItem>
-                  <SelectItem value="Üsküdar">Üsküdar</SelectItem>
-                  <SelectItem value="Şişli">Şişli</SelectItem>
-                  <SelectItem value="Bakırköy">Bakırköy</SelectItem>
-                  <SelectItem value="Fatih">Fatih</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="Type location (e.g., Kadıköy, Beşiktaş...)"
+                  value={locationInput}
+                  onChange={handleLocationInputChange}
+                  onFocus={() => {
+                    if (locationSuggestions.length > 0) {
+                      setShowSuggestions(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay to allow click on suggestion
+                    setTimeout(() => setShowSuggestions(false), 200);
+                  }}
+                  className="h-10 text-sm border-primary/20"
+                />
+                {locationLoading && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                  </div>
+                )}
+                
+                {/* Suggestions Dropdown */}
+                {showSuggestions && locationSuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                    {locationSuggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => handleLocationSelect(suggestion)}
+                        className="px-4 py-2 hover:bg-primary/5 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="font-medium text-sm text-gray-900">
+                          {suggestion.display_name.split(',')[0]}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {suggestion.display_name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {post.latitude && post.longitude && (
+                <p className="text-xs text-gray-500">
+                  Coordinates: {post.latitude.toFixed(6)}, {post.longitude.toFixed(6)}
+                </p>
+              )}
             </div>
 
             {/* Action Buttons */}

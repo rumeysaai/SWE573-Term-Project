@@ -31,16 +31,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 # YENİ: Kayıt işlemi için serializer
 class RegisterSerializer(serializers.ModelSerializer):
-    # Django User modelinde 'username' zorunludur.
-    # Frontend'den 'userName' olarak geliyor, biz 'username' olarak eşleştiriyoruz.
     username = serializers.CharField(required=True)
     email = serializers.EmailField(required=True)
     
-    # Parolayı doğrulamak için
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True, label="Parola Tekrarı")
     
-    # interested_tags: tag_id ile eşleşecek
     interested_tags = serializers.SlugRelatedField(
         many=True,
         queryset=Tag.objects.all(),
@@ -156,6 +152,8 @@ class PostSerializer(serializers.ModelSerializer):
             'frequency',
             'participant_count',
             'date',
+            'latitude',
+            'longitude',
             'postedBy',   
             'avatar',     
             'postedDate', 
