@@ -107,3 +107,43 @@ class PostViewSet(viewsets.ModelViewSet):
     
     # Hangi alanlara göre sıralama yapılabilir?
     ordering_fields = ['created_at', 'title']
+    
+    def get_queryset(self):
+        """
+        Coğrafi sınır (bounding box) filtresi ekler.
+        Query parametreleri: min_lat, max_lat, min_lon, max_lon
+        """
+        queryset = super().get_queryset()
+        
+        # Bounding box parametrelerini al
+        min_lat = self.request.query_params.get('min_lat')
+        max_lat = self.request.query_params.get('max_lat')
+        min_lon = self.request.query_params.get('min_lon')
+        max_lon = self.request.query_params.get('max_lon')
+        
+        # Coğrafi filtreleme uygula
+        if min_lat is not None:
+            try:
+                queryset = queryset.filter(latitude__gte=float(min_lat))
+            except (ValueError, TypeError):
+                pass
+        
+        if max_lat is not None:
+            try:
+                queryset = queryset.filter(latitude__lte=float(max_lat))
+            except (ValueError, TypeError):
+                pass
+        
+        if min_lon is not None:
+            try:
+                queryset = queryset.filter(longitude__gte=float(min_lon))
+            except (ValueError, TypeError):
+                pass
+        
+        if max_lon is not None:
+            try:
+                queryset = queryset.filter(longitude__lte=float(max_lon))
+            except (ValueError, TypeError):
+                pass
+        
+        return queryset

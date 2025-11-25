@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import api from "../api"; 
-import { Link, useNavigate } from "react-router-dom"; 
+import { Link, useNavigate } from "react-router-dom";
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   MapPin,
   Search,
@@ -19,18 +22,24 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
-
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
-
 import { SimpleAvatar } from "../components/ui/SimpleAvatar";
 import { SimpleSelect, SimpleSelectItem } from "../components/ui/SimpleSelect";
 import { SimpleDialog, SimpleDialogHeader, SimpleDialogTitle, SimpleDialogDescription } from "../components/ui/SimpleDialog";
 import { SimpleTabs, SimpleTabsList, SimpleTabsTrigger, SimpleTabsContent } from "../components/ui/SimpleTabs";
 import { useAuth } from "../App";
+
+// Fix for default marker icons in Leaflet with React
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 export default function Home() {
   const { logout } = useAuth();
@@ -88,11 +97,8 @@ export default function Home() {
             addSuffix: true,
             locale: tr,
           }),
-          mapPosition: { 
-            // Random position for map pins
-            top: `${Math.random() * 60 + 20}%`, 
-            left: `${Math.random() * 60 + 20}%` 
-          }, 
+          latitude: post.latitude,
+          longitude: post.longitude,
         }));
         
         setPosts(formattedPosts);
@@ -148,6 +154,21 @@ export default function Home() {
   const offerPosts = filteredPosts.filter((post) => post.type === "offer");
   const needPosts = filteredPosts.filter((post) => post.type === "need");
   const mapPosts = activeTab === 'offers' ? offerPosts : needPosts;
+  
+  // Filter posts that have valid coordinates
+  const postsWithCoordinates = mapPosts.filter(post => 
+    post.latitude != null && post.longitude != null && 
+    !isNaN(post.latitude) && !isNaN(post.longitude)
+  );
+  
+  // Calculate center of map (default to Istanbul if no posts)
+  const defaultCenter = [41.0082, 28.9784]; // Istanbul coordinates
+  const mapCenter = postsWithCoordinates.length > 0
+    ? [
+        postsWithCoordinates.reduce((sum, p) => sum + p.latitude, 0) / postsWithCoordinates.length,
+        postsWithCoordinates.reduce((sum, p) => sum + p.longitude, 0) / postsWithCoordinates.length
+      ]
+    : defaultCenter;
 
   const handlePostClick = (post) => {
     setSelectedPost(post);
@@ -263,32 +284,65 @@ export default function Home() {
       <div>
         <Card className="overflow-hidden shadow-md border-primary/20">
           <CardContent className="p-0">
-            <div className="bg-gradient-to-br from-orange-500/10 via-gray-50 to-primary/10 h-[300px] flex items-center justify-center relative overflow-hidden">
-              <div className="text-gray-500 text-center z-10">
-                <MapPin className="w-8 h-8 mx-auto mb-2 text-primary" />
-                <p>Map Integration (Coming Soon)</p>
-                <p className="text-sm">
-                  Posts will be displayed on the map
-                </p>
-              </div>
-
-              {mapPosts.map((post) => {
-                  const pinColor =
-                    post.type === "offer" ? "#3B82F6" : "#F97316";
-                  return (
-                    <div
-                      key={post.id}
-                      className="absolute w-7 h-7 rounded-full border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
-                      style={{
-                        backgroundColor: pinColor,
-                        ...post.mapPosition,
-                      }}
-                      onClick={() => handlePostClick(post)}
-                    >
-                      <div className="w-3 h-3 bg-white rounded-full" />
-                    </div>
-                  );
-                })}
+            <div className="h-[400px] w-full relative">
+              {postsWithCoordinates.length > 0 ? (
+                <MapContainer
+                  center={mapCenter}
+                  zoom={postsWithCoordinates.length === 1 ? 13 : 11}
+                  style={{ height: '100%', width: '100%', zIndex: 0 }}
+                  scrollWheelZoom={true}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {postsWithCoordinates.map((post) => {
+                    const pinColor = post.type === "offer" ? "#3B82F6" : "#F97316";
+                    const customIcon = L.divIcon({
+                      className: 'custom-marker',
+                      html: `<div style="background-color: ${pinColor}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+                      iconSize: [20, 20],
+                      iconAnchor: [10, 10],
+                    });
+                    
+                    return (
+                      <Marker
+                        key={post.id}
+                        position={[post.latitude, post.longitude]}
+                        icon={customIcon}
+                        eventHandlers={{
+                          click: () => handlePostClick(post),
+                        }}
+                      >
+                        <Popup>
+                          <div className="p-2 min-w-[150px]">
+                            <h3 className="font-semibold text-sm mb-1">{post.title}</h3>
+                            <p className="text-xs text-gray-600 mb-2">{post.location}</p>
+                            <button
+                              className="w-full px-3 py-1.5 bg-primary text-white text-xs rounded-md hover:bg-primary/90 transition-colors cursor-pointer"
+                              onClick={() => {
+                                handlePostClick(post);
+                              }}
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })}
+                </MapContainer>
+              ) : (
+                <div className="bg-gradient-to-br from-orange-500/10 via-gray-50 to-primary/10 h-full flex items-center justify-center">
+                  <div className="text-gray-500 text-center z-10">
+                    <MapPin className="w-8 h-8 mx-auto mb-2 text-primary" />
+                    <p>No posts with location data</p>
+                    <p className="text-sm">
+                      Posts with latitude and longitude will appear on the map
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

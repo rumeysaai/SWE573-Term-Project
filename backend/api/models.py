@@ -57,7 +57,12 @@ class Post(models.Model):
     
     frequency = models.CharField(max_length=50, blank=True, null=True) 
     participant_count = models.IntegerField(default=1, blank=True, null=True)
-    date = models.DateField(blank=True, null=True) 
+    date = models.DateField(blank=True, null=True)
+    
+    # Geographic coordinates
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True) 
+    location_display_name = models.CharField(max_length=255, blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

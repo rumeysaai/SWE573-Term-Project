@@ -57,18 +57,25 @@ export default function App() {
     // Fonksiyonun adını 'initializeApp' olarak değiştirdik
     const initializeApp = async () => {
       try {
+        // Timeout ekle - 5 saniye içinde cevap gelmezse devam et
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        );
+
         // 1. YENİ ADIM: Önce backend'den CSRF cookie'sini iste
         // Bu çağrı bittiğinde, tarayıcı 'csrftoken' cookie'sine sahip olacak.
-        await api.get('/csrf/'); 
+        await Promise.race([api.get('/csrf/'), timeoutPromise]); 
 
         // 2. ESKİ ADIM: Artık cookie'miz olduğuna göre session'ı kontrol et
-        const response = await api.get('/session/');
+        const response = await Promise.race([api.get('/session/'), timeoutPromise]);
         setUser(response.data);
       } catch (error) {
         // CSRF veya session'dan biri hata verirse, kullanıcı giriş yapmamıştır
+        console.log('Auth check failed, user not logged in:', error.message);
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initializeApp();
