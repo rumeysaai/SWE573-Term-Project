@@ -9,7 +9,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 
 export default function MyProfile() {
@@ -31,7 +31,6 @@ export default function MyProfile() {
     phone: '',
     location: '',
     bio: '',
-    skills: '',
     avatar: '',
     time_balance: 0,
     interested_tags: [],
@@ -40,7 +39,7 @@ export default function MyProfile() {
   // Local edit states for each section
   const [profilePhotoData, setProfilePhotoData] = useState({ avatar: '' });
   const [personalInfoData, setPersonalInfoData] = useState({ email: '', phone: '', location: '' });
-  const [aboutMeData, setAboutMeData] = useState({ bio: '', skills: '', interested_tags: [] });
+  const [aboutMeData, setAboutMeData] = useState({ bio: '', interested_tags: [] });
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [avatarPreview, setAvatarPreview] = useState(null);
 
@@ -54,10 +53,9 @@ export default function MyProfile() {
         const data = {
           username: userData.username || '',
           email: userData.email || '',
-          phone: '',
-          location: '',
+          phone: userData.profile?.phone || '',
+          location: userData.profile?.location || '',
           bio: userData.profile?.bio || '',
-          skills: '',
           avatar: userData.profile?.avatar || '',
           time_balance: userData.profile?.time_balance || 0,
           interested_tags: userData.profile?.interested_tags || [],
@@ -66,7 +64,7 @@ export default function MyProfile() {
         setFormData(data);
         setProfilePhotoData({ avatar: data.avatar });
         setPersonalInfoData({ email: data.email, phone: data.phone, location: data.location });
-        setAboutMeData({ bio: data.bio, skills: data.skills, interested_tags: data.interested_tags });
+        setAboutMeData({ bio: data.bio, interested_tags: data.interested_tags });
 
         // Fetch all tags
         const tagsResponse = await api.get('/tags/');
@@ -139,6 +137,8 @@ export default function MyProfile() {
       setSaving(prev => ({ ...prev, personalInfo: true }));
       const response = await api.put('/users/me/', {
         email: personalInfoData.email,
+        phone: personalInfoData.phone,
+        location: personalInfoData.location,
       });
 
       setUser(response.data);
@@ -170,7 +170,6 @@ export default function MyProfile() {
       setFormData(prev => ({ 
         ...prev, 
         bio: aboutMeData.bio,
-        skills: aboutMeData.skills,
         interested_tags: aboutMeData.interested_tags,
       }));
       setEditingAboutMe(false);
@@ -252,6 +251,25 @@ export default function MyProfile() {
             </p>
           </div>
         </div>
+
+        {/* TimeBank Balance Card */}
+        <Card className="p-6 bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
+                <Clock className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">TimeBank Balance</h2>
+                <p className="text-sm text-slate-600">Your available time credits</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-bold text-primary">{formData.time_balance.toFixed(2)}</p>
+              <p className="text-sm text-slate-600">hours</p>
+            </div>
+          </div>
+        </Card>
 
         {/* Profile Photo Section */}
         <Card className="p-6">
@@ -537,7 +555,6 @@ export default function MyProfile() {
                 onClick={() => {
                   setAboutMeData({ 
                     bio: formData.bio, 
-                    skills: formData.skills, 
                     interested_tags: formData.interested_tags 
                   });
                   setEditingAboutMe(true);
@@ -555,7 +572,6 @@ export default function MyProfile() {
                     setEditingAboutMe(false);
                     setAboutMeData({ 
                       bio: formData.bio, 
-                      skills: formData.skills, 
                       interested_tags: formData.interested_tags 
                     });
                   }}
@@ -596,23 +612,6 @@ export default function MyProfile() {
               ) : (
                 <p className="text-slate-700 leading-relaxed">{formData.bio || 'No biography added yet'}</p>
               )}
-            </div>
-
-            {/* Skills */}
-            <div>
-              <Label className="mb-2 block">Skills</Label>
-              {editingAboutMe ? (
-                <Input
-                  value={aboutMeData.skills}
-                  onChange={(e) => setAboutMeData(prev => ({ ...prev, skills: e.target.value }))}
-                  placeholder="Enter your skills separated by commas"
-                />
-              ) : (
-                <p className="text-slate-700">{formData.skills || 'No skills added yet'}</p>
-              )}
-              <p className="text-sm text-slate-500 mt-1">
-                List your skills separated by commas
-              </p>
             </div>
 
             {/* Interests (Tags) */}

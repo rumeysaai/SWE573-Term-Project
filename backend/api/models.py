@@ -14,6 +14,8 @@ class Profile(models.Model):
         validators=[MinValueValidator(0.0), MaxValueValidator(10.0)]
     )
     bio = models.TextField(blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    location = models.CharField(max_length=200, blank=True, null=True)
     interested_tags = models.ManyToManyField('Tag', blank=True, related_name='interested_profiles')
 
     def __str__(self):

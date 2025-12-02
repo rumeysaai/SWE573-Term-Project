@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -7,7 +7,10 @@ import { Label } from "../components/ui/label";
 import { Progress } from "../components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { SimpleTabs, SimpleTabsList, SimpleTabsTrigger, SimpleTabsContent } from "../components/ui/SimpleTabs";
+import { Button } from "../components/ui/button";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "../App";
+import { formatDistanceToNow } from "date-fns";
 import {
   Clock,
   User,
@@ -18,13 +21,19 @@ import {
   Award,
   Timer,
   Smile,
+  MessageCircle,
+  Package,
 } from "lucide-react";
 
 export default function Profile() {
   const { username } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [profileData, setProfileData] = useState(null);
+  const [userPosts, setUserPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
   useEffect(() => {
     const fetchProfile = async () => {
       if (!username) {
@@ -35,8 +44,38 @@ export default function Profile() {
 
       try {
         setLoading(true);
-        const response = await api.get(`/users/${username}/`);
-        setProfileData(response.data);
+        const [profileResponse, postsResponse] = await Promise.all([
+          api.get(`/users/${username}/`),
+          api.get('/posts/', { params: { posted_by__username: username } })
+        ]);
+        
+        setProfileData(profileResponse.data);
+        
+        // Format posts data
+        let postsData = [];
+        if (Array.isArray(postsResponse.data)) {
+          postsData = postsResponse.data;
+        } else if (postsResponse.data && typeof postsResponse.data === 'object') {
+          postsData = postsResponse.data.results || [];
+        }
+        
+        const formattedPosts = postsData.map(post => ({
+          id: post.id,
+          title: post.title,
+          tags: post.tags || [],
+          location: post.location,
+          type: post.post_type,
+          description: post.description,
+          duration: post.duration,
+          frequency: post.frequency,
+          participantCount: post.participant_count,
+          date: post.date,
+          postedBy: post.postedBy,
+          avatar: post.avatar,
+          postedDate: post.postedDate,
+        }));
+        
+        setUserPosts(formattedPosts);
       } catch (err) {
         console.error('Error fetching profile:', err);
         setError('Failed to load profile');
@@ -48,35 +87,8 @@ export default function Profile() {
     fetchProfile();
   }, [username]);
 
-  const providedServices = [
-    {
-      title: "Story Telling For Kids",
-      hours: 4,
-      date: "Oct 10, 2025",
-      tags: ["Literature", "Book", "Story", "Novel"],
-    },
-    {
-      title: "Web Design Consultation",
-      hours: 2,
-      date: "Feb 5, 2025",
-      tags: ["Design", "Digital"],
-    },
-  ];
-
-  const receivedServices = [
-    {
-      title: "Car Repair Assistance",
-      hours: 2,
-      date: "Jun 8, 2025",
-      tags: ["Mechanics", "Repair"],
-    },
-    {
-      title: "Home Baking Lessons",
-      hours: 1,
-      date: "Sep 30, 2025",
-      tags: ["Cooking", "Education"],
-    },
-  ];
+  const offerPosts = userPosts.filter(post => post.type === 'offer');
+  const needPosts = userPosts.filter(post => post.type === 'need');
 
   if (loading) {
     return (
@@ -137,6 +149,18 @@ export default function Profile() {
                       </p>
                     )}
                   </div>
+                  {user && user.username !== profileData.username && (
+                    <Button 
+                      className="mt-4 bg-primary hover:bg-primary/90 text-white"
+                      onClick={() => {
+                        // TODO: Navigate to messaging page or open message dialog
+                        console.log('Send message to', profileData.username);
+                      }}
+                    >
+                      <MessageCircle className="w-4 h-4 mr-2" />
+                      Send Message
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -200,15 +224,15 @@ export default function Profile() {
           </div>
         </CardHeader>
         <CardContent className="pt-6">
-          <SimpleTabs defaultValue="provided">
+          <SimpleTabs defaultValue="offers">
             <SimpleTabsList>
-              <SimpleTabsTrigger value="provided">
+              <SimpleTabsTrigger value="offers">
                 <Leaf className="w-4 h-4 mr-2" />
-                Provided Services
+                Offers
               </SimpleTabsTrigger>
-              <SimpleTabsTrigger value="received">
-                <Sprout className="w-4 h-4 mr-2" />
-                Received Services
+              <SimpleTabsTrigger value="needs">
+                <Package className="w-4 h-4 mr-2" />
+                Needs
               </SimpleTabsTrigger>
               <SimpleTabsTrigger value="history">
                 <Clock className="w-4 h-4 mr-2" />
@@ -216,74 +240,120 @@ export default function Profile() {
               </SimpleTabsTrigger>
             </SimpleTabsList>
 
-            <SimpleTabsContent value="provided" className="space-y-3 mt-6">
-              {providedServices.map((service, index) => (
-                <div
-                  key={index}
-                  className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="text-primary">{service.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {service.date}
-                      </p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="border-primary text-primary bg-primary/10"
-                    >
-                      {service.hours}h
-                    </Badge>
-                  </div>
-                  <div className="flex gap-2">
-                    {service.tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="text-xs"
-                      >
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
+            <SimpleTabsContent value="offers" className="space-y-3 mt-6">
+              {offerPosts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Leaf className="w-12 h-12 mx-auto mb-4 text-primary/50" />
+                  <p>No offers published yet.</p>
                 </div>
-              ))}
+              ) : (
+                offerPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/post/${post.id}`)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-primary font-medium">{post.title}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {post.postedDate ? formatDistanceToNow(new Date(post.postedDate), { addSuffix: true }) : 'Recently'}
+                        </p>
+                        {post.description && (
+                          <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                            {post.description}
+                          </p>
+                        )}
+                      </div>
+                      {post.duration && (
+                        <Badge
+                          variant="outline"
+                          className="border-primary text-primary bg-primary/10"
+                        >
+                          {post.duration}
+                        </Badge>
+                      )}
+                    </div>
+                    {post.tags && post.tags.length > 0 && (
+                      <div className="flex gap-2 flex-wrap">
+                        {post.tags.map((tag, idx) => (
+                          <Badge
+                            key={idx}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {post.location && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="w-3 h-3" />
+                        <span>{post.location}</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </SimpleTabsContent>
 
-            <SimpleTabsContent value="received" className="space-y-3 mt-6">
-              {receivedServices.map((service, index) => (
-                <div
-                  key={index}
-                  className="border-2 border-accent/60 bg-accent/10 rounded-xl p-4 space-y-2 hover:border-accent/80 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="text-orange-600 font-medium">{service.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {service.date}
-                      </p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="border-accent text-orange-600 bg-accent/20"
-                    >
-                      {service.hours}h
-                    </Badge>
-                  </div>
-                  <div className="flex gap-2">
-                    {service.tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="text-xs"
-                      >
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
+            <SimpleTabsContent value="needs" className="space-y-3 mt-6">
+              {needPosts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="w-12 h-12 mx-auto mb-4 text-orange-500/50" />
+                  <p>No needs published yet.</p>
                 </div>
-              ))}
+              ) : (
+                needPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="border-2 border-accent/60 bg-accent/10 rounded-xl p-4 space-y-2 hover:border-accent/80 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/post/${post.id}`)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-orange-600 font-medium">{post.title}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {post.postedDate ? formatDistanceToNow(new Date(post.postedDate), { addSuffix: true }) : 'Recently'}
+                        </p>
+                        {post.description && (
+                          <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                            {post.description}
+                          </p>
+                        )}
+                      </div>
+                      {post.duration && (
+                        <Badge
+                          variant="outline"
+                          className="border-accent text-orange-600 bg-accent/20"
+                        >
+                          {post.duration}
+                        </Badge>
+                      )}
+                    </div>
+                    {post.tags && post.tags.length > 0 && (
+                      <div className="flex gap-2 flex-wrap">
+                        {post.tags.map((tag, idx) => (
+                          <Badge
+                            key={idx}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {post.location && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="w-3 h-3" />
+                        <span>{post.location}</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </SimpleTabsContent>
 
             <SimpleTabsContent value="history" className="space-y-3 mt-6">

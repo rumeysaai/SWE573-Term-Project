@@ -25,11 +25,13 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'profile', 'is_staff', 'is_superuser']
     
     def get_profile(self, obj):
-        # Get and return profile balance
+        # Get and return profile data
         return {
             'time_balance': obj.profile.time_balance,
             'avatar': obj.profile.avatar,
-            'bio': obj.profile.bio if hasattr(obj.profile, 'bio') else None
+            'bio': obj.profile.bio if hasattr(obj.profile, 'bio') else None,
+            'phone': obj.profile.phone if hasattr(obj.profile, 'phone') else None,
+            'location': obj.profile.location if hasattr(obj.profile, 'location') else None,
         }
 
 # NEW: Serializer for registration
