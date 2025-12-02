@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import api from '../api';
+import { useAuth } from '../App';
 
 import { 
   ArrowLeft, 
@@ -10,7 +13,8 @@ import {
   User,
   MessageCircle,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Loader2
 } from 'lucide-react';
 
 import { Button } from '../components/ui/button';
@@ -21,13 +25,18 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
 
-const currentUser = {
-  id: 'user-1',
-  userName: 'Alex Johnson',
-};
-
-
 export default function Negotiation() {
+  const { postId } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [postDetails, setPostDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  const currentUser = user ? {
+    id: user.id,
+    userName: user.username,
+  } : null;
   const [proposals, setProposals] = useState([
     {
       id: 'p1',
@@ -64,18 +73,53 @@ export default function Negotiation() {
     notes: '',
   });
 
-  const postDetails = {
-    title: 'Language Tutoring (Spanish)',
-    type: 'offer',
-    owner: 'Maria Garcia',
-    tags: ['Education', 'Language'],
-    location: 'Kadikoy',
-  };
+  useEffect(() => {
+    const fetchPostDetails = async () => {
+      if (!postId) {
+        setError('Post ID is missing');
+        setLoading(false);
+        return;
+      }
 
-  const latestProposal = proposals[proposals.length - 1];
-  const pendingProposal = proposals.find(p => p.status === 'pending' && p.fromUserId !== currentUser.id);
+      try {
+        setLoading(true);
+        const response = await api.get(`/posts/${postId}/`);
+        const post = response.data;
+        
+        setPostDetails({
+          id: post.id,
+          title: post.title,
+          type: post.post_type,
+          owner: post.postedBy,
+          tags: post.tags || [],
+          location: post.location,
+          description: post.description,
+          duration: post.duration,
+          frequency: post.frequency,
+          participant_count: post.participant_count,
+          date: post.date,
+          latitude: post.latitude,
+          longitude: post.longitude,
+          avatar: post.avatar,
+        });
+      } catch (err) {
+        console.error('Error fetching post details:', err);
+        setError('Failed to load post details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPostDetails();
+  }, [postId]);
+
+  const pendingProposal = currentUser ? proposals.find(p => p.status === 'pending' && p.fromUserId !== currentUser.id) : null;
 
   const handleSubmitProposal = () => {
+    if (!currentUser) {
+      console.error('User not logged in');
+      return;
+    }
     if (!proposalData.date || !proposalData.time) {
       console.error('Please select a date and time');
       return;
@@ -118,11 +162,44 @@ export default function Negotiation() {
     console.error('Proposal rejected');
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading post details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !postDetails) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error || 'Post not found'}</p>
+          <Button onClick={() => navigate('/')} variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <div className="container mx-auto px-4 py-6 max-w-5xl space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3 pb-4 border-b border-primary/20">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/')}
+            className="hover:bg-primary/10"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
           <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-primary-foreground shadow-md bg-slate-900 text-white">
             <MessageCircle className="w-6 h-6" />
           </div>
@@ -154,8 +231,14 @@ export default function Negotiation() {
             </div>
           </CardHeader>
           <CardContent className="pt-4">
+            {postDetails.description && (
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground mb-2">Description</p>
+                <p className="text-slate-700">{postDetails.description}</p>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
-              {postDetails.tags.map((tag) => (
+              {postDetails.tags && postDetails.tags.map((tag) => (
                 <Badge 
                   key={tag} 
                   variant="secondary"
@@ -165,6 +248,12 @@ export default function Negotiation() {
                 </Badge>
               ))}
             </div>
+            {postDetails.duration && (
+              <div className="mt-4 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                <span className="text-sm text-muted-foreground">Duration: {postDetails.duration}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 

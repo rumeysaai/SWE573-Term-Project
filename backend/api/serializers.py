@@ -8,34 +8,39 @@ class TagSerializer(serializers.ModelSerializer):
         model = Tag
         fields = ['id', 'name']
 
-# Sadece Avatarı almak için basit bir profil serializer'ı
+# Simple profile serializer to get only avatar
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ['avatar', 'time_balance']
 
 class UserSerializer(serializers.ModelSerializer):
-    # 'profile' alanını (içindeki time_balance ile) kullanıcıyla birlikte göster
+    # Show 'profile' field (with time_balance) together with user
     profile = serializers.SerializerMethodField()
+    is_staff = serializers.BooleanField(read_only=True)
+    is_superuser = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'profile']
+        fields = ['id', 'username', 'email', 'profile', 'is_staff', 'is_superuser']
     
     def get_profile(self, obj):
-        # Profil bakiyesini alıp döndür
+        # Get and return profile data
         return {
             'time_balance': obj.profile.time_balance,
-            'avatar': obj.profile.avatar
+            'avatar': obj.profile.avatar,
+            'bio': obj.profile.bio if hasattr(obj.profile, 'bio') else None,
+            'phone': obj.profile.phone if hasattr(obj.profile, 'phone') else None,
+            'location': obj.profile.location if hasattr(obj.profile, 'location') else None,
         }
 
-# YENİ: Kayıt işlemi için serializer
+# NEW: Serializer for registration
 class RegisterSerializer(serializers.ModelSerializer):
     username = serializers.CharField(required=True)
     email = serializers.EmailField(required=True)
     
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
-    password2 = serializers.CharField(write_only=True, required=True, label="Parola Tekrarı")
+    password2 = serializers.CharField(write_only=True, required=True, label="Password Confirmation")
     
     interested_tags = serializers.SlugRelatedField(
         many=True,
@@ -50,36 +55,33 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ['username', 'email', 'password', 'password2', 'interested_tags']
 
     def validate(self, attrs):
-        # 1. Parolalar eşleşiyor mu?
+        
         if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({"password": "Parolalar eşleşmiyor."})
-        
-        # 2. Email adresi zaten kayıtlı mı?
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+      
         if User.objects.filter(email=attrs['email']).exists():
-            raise serializers.ValidationError({"email": "Bu e-posta adresi zaten kullanılıyor."})
+            raise serializers.ValidationError({"email": "This email address is already in use."})
         
-        # 3. Kullanıcı adı zaten alınmış mı?
         if User.objects.filter(username=attrs['username']).exists():
-            raise serializers.ValidationError({"username": "Bu kullanıcı adı zaten alınmış."})
+            raise serializers.ValidationError({"username": "This username is already taken."})
 
         return attrs
 
     def create(self, validated_data):
-        # interested_tags'i validated_data'dan çıkar
+        # Extract interested_tags from validated_data
         interested_tags = validated_data.pop('interested_tags', [])
         
-        # create_user metodu parolayı otomatik olarak hash'ler (şifreler)
+        # create_user method automatically hashes the password
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password']
         )
         
-        # ❗ BAŞLANGIÇ BONUSU
-        # Sinyal, profili oluşturdu. Biz şimdi bonusu ekliyoruz.
-        user.profile.time_balance = 5.0  # 5 saatlik bonus
+        # ❗ STARTING BONUS
+        user.profile.time_balance = 3.0  # 3 hour bonus
         
-        # interested_tags'i profile'a ekle
+        # Add interested_tags to profile
         if interested_tags:
             user.profile.interested_tags.set(interested_tags)
         
@@ -87,20 +89,20 @@ class RegisterSerializer(serializers.ModelSerializer):
         
         return user
 
-# Ana İlan (Post) Serializer'ı
+# Main Post Serializer
 class PostSerializer(serializers.ModelSerializer):
-    # posted_by = UserSerializer(read_only=True) # Bu, nesne içinde nesne döndürür
+    # posted_by = UserSerializer(read_only=True) # This returns an object within an object
     
-    # Frontend'in bekleiği 'postedBy' ve 'avatar' alanlarını
-    # 'posted_by' (User) nesnesinden türeterek oluşturuyoruz.
+    # We create the 'postedBy' and 'avatar' fields that the frontend expects
+    # by deriving them from the 'posted_by' (User) object.
     postedBy = serializers.CharField(source='posted_by.username', read_only=True)
     avatar = serializers.URLField(source='posted_by.profile.avatar', read_only=True)
     
-    # 'tags' alanı: Write için ID listesi alır, Read için name listesi döner
-    # PrimaryKeyRelatedField ile write, SerializerMethodField ile read yapacağız
+    # 'tags' field: Takes ID list for write, returns name list for read
+    # We will use PrimaryKeyRelatedField for write, SerializerMethodField for read
     tags = serializers.SerializerMethodField()
     
-    # Write için tags_ids alanı
+    # tags_ids field for write
     tags_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Tag.objects.all(),
@@ -110,15 +112,15 @@ class PostSerializer(serializers.ModelSerializer):
     )
     
     def get_tags(self, obj):
-        """Response'da tags'i name listesi olarak döndür"""
+        """Return tags as name list in response"""
         return [tag.name for tag in obj.tags.all()]
     
-    # 'postedDate' alanını 'created_at' olarak yeniden adlandır
+    
     postedDate = serializers.DateTimeField(source='created_at', read_only=True)
     
     def create(self, validated_data):
-        """Create işleminde tags'i manuel olarak işle"""
-        # tags_ids alanı source='tags' ile işaretlendiği için validated_data'da 'tags' olarak gelecek
+        """Manually process tags in create operation"""
+        
         tags_data = validated_data.pop('tags', [])
         post = Post.objects.create(**validated_data)
         if tags_data:
@@ -126,7 +128,7 @@ class PostSerializer(serializers.ModelSerializer):
         return post
     
     def update(self, instance, validated_data):
-        """Update işleminde tags'i manuel olarak işle"""
+        """Manually process tags in update operation"""
         
         tags_data = validated_data.pop('tags', None)
         for attr, value in validated_data.items():

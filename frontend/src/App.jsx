@@ -11,6 +11,11 @@ import Negotiation from './pages/Negotiation';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Profile from './pages/Profile';
+import MyProfile from './pages/MyProfile';
+import Forum from './pages/Forum';
+import Admin from './pages/Admin';
+import { Header } from './components/Header';
+import { Footer } from './components/Footer';
 
 function LoadingSpinner() {
   return (
@@ -32,6 +37,24 @@ function ProtectedRoute({ children }) {
   
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingSpinner />; 
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (!user.is_staff && !user.is_superuser) {
+    return <Navigate to="/" replace />;
   }
   
   return children;
@@ -105,7 +128,7 @@ export default function App() {
       setUser(null); 
     }
   };
-  // 5. GÜNCELLENMİŞ CONTEXT: setUser'ı ekledik
+ 
   const authContextValue = {
     user,
     setUser, 
@@ -118,45 +141,63 @@ export default function App() {
     <AuthContext.Provider value={authContextValue}>
       <Toaster richColors position="top-right" />
       <Router>
-        <Routes>
-          {/* Sadece Misafirlerin Görebileceği Rotalar */}
-          <Route
-            path="/login"
-            element={<PublicOnlyRoute><Login /></PublicOnlyRoute>}
-          />
-          <Route
-            path="/register" 
-            element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>}
-          />
+        <div className="flex flex-col min-h-screen">
+          <Header />
+          <main className="flex-1 px-6 md:px-8 lg:px-12">
+            <Routes>
+              {/* Sadece Misafirlerin Görebileceği Rotalar */}
+              <Route
+                path="/login"
+                element={<PublicOnlyRoute><Login /></PublicOnlyRoute>}
+              />
+              <Route
+                path="/register" 
+                element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>}
+              />
 
-          {/* Korumalı Rotalar */}
-          <Route
-            path="/"
-            element={<ProtectedRoute><Home /></ProtectedRoute>}
-          />
-          <Route
-            path="/post/new"
-            element={<ProtectedRoute><Post /></ProtectedRoute>}
-          />
-          <Route
-            path="/post/edit/:id"
-            element={<ProtectedRoute><Post /></ProtectedRoute>}
-          />
-          <Route
-            path="/post/:postId"
-            element={<ProtectedRoute><Post /></ProtectedRoute>}
-          />
-          <Route
-            path="/negotiate/:postId"
-            element={<ProtectedRoute><Negotiation /></ProtectedRoute>}
-          />
-          <Route
-            path="/profile"
-            element={<ProtectedRoute><Profile /></ProtectedRoute>}
-          />
-          
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+              {/* Korumalı Rotalar */}
+              <Route
+                path="/"
+                element={<ProtectedRoute><Home /></ProtectedRoute>}
+              />
+              <Route
+                path="/post/new"
+                element={<ProtectedRoute><Post /></ProtectedRoute>}
+              />
+              <Route
+                path="/post/edit/:id"
+                element={<ProtectedRoute><Post /></ProtectedRoute>}
+              />
+              <Route
+                path="/post/:postId"
+                element={<ProtectedRoute><Post /></ProtectedRoute>}
+              />
+              <Route
+                path="/negotiate/:postId"
+                element={<ProtectedRoute><Negotiation /></ProtectedRoute>}
+              />
+              <Route
+                path="/my-profile"
+                element={<ProtectedRoute><MyProfile /></ProtectedRoute>}
+              />
+              <Route
+                path="/profile/:username"
+                element={<ProtectedRoute><Profile /></ProtectedRoute>}
+              />
+              <Route
+                path="/forum"
+                element={<ProtectedRoute><Forum /></ProtectedRoute>}
+              />
+              <Route
+                path="/admin-panel"
+                element={<AdminRoute><Admin /></AdminRoute>}
+              />
+              
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </main>
+          <Footer />
+        </div>
       </Router>
     </AuthContext.Provider>
   );

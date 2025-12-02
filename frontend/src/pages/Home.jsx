@@ -18,7 +18,6 @@ import {
   Pencil,
   RefreshCw,
   Users,
-  LogOut,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -42,8 +41,8 @@ L.Icon.Default.mergeOptions({
 });
 
 export default function Home() {
-  const { logout } = useAuth();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [posts, setPosts] = useState([]);
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +50,12 @@ export default function Home() {
   const [selectedPost, setSelectedPost] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("offers");
+  const [showAllPosts, setShowAllPosts] = useState(false);
+
+  // Reset showAllPosts when tab changes
+  useEffect(() => {
+    setShowAllPosts(false);
+  }, [activeTab]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTag, setSelectedTag] = useState("");
@@ -153,6 +158,11 @@ export default function Home() {
 
   const offerPosts = filteredPosts.filter((post) => post.type === "offer");
   const needPosts = filteredPosts.filter((post) => post.type === "need");
+  
+  // Limit posts to 5 if not showing all
+  const displayedOfferPosts = showAllPosts ? offerPosts : offerPosts.slice(0, 5);
+  const displayedNeedPosts = showAllPosts ? needPosts : needPosts.slice(0, 5);
+  
   const mapPosts = activeTab === 'offers' ? offerPosts : needPosts;
   
   // Filter posts that have valid coordinates
@@ -175,11 +185,6 @@ export default function Home() {
     setIsDialogOpen(true);
   };
 
-  const handleSignOut = async () => {
-    await logout();
-    navigate("/login");
-  };
-
   if (loading && posts.length === 0) { // Show full screen loading only on initial load
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -198,35 +203,9 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col gap-6 bg-gray-50 min-h-screen pb-4 px-4 md:px-6 lg:px-8">
-      {/* Header */}
-      <div className="flex items-center justify-between py-4 border-b bg-gradient-to-r from-primary/5 to-orange-500/10">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-md">
-            <Leaf className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-primary font-normal text-lg">The Hive</h3>
-            <p className="text-xs text-gray-500">
-            Community-Oriented Service Offering Platform
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border">
-            <Clock className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">Balance: 0 Hours</span>
-          </div>
-          <Button variant="ghost">My Profile</Button>
-          <Button variant="ghost" onClick={handleSignOut}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      </div>
-
+    <div className="flex flex-col gap-6 bg-gray-50 pb-4">
       {/* Search Area */}
-      <div className="space-y-4">
+      <div className="space-y-4 mt-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
@@ -248,32 +227,11 @@ export default function Home() {
               </SimpleSelectItem>
             ))}
           </SimpleSelect>
-
-          <SimpleSelect
-            placeholder="Location"
-            onValueChange={setSelectedLocation}
-          >
-            {/* We can get locations dynamically from posts (better approach) */}
-            {Array.isArray(posts) && [...new Set(posts.map(p => p.location))].map(location => (
-              <SimpleSelectItem key={location} value={location}>
-                {location}
-              </SimpleSelectItem>
-            ))}
-          </SimpleSelect>
-
-          <SimpleSelect
-            placeholder="Type"
-            onValueChange={setSelectedType}
-          >
-            <SimpleSelectItem value="offer">Offers</SimpleSelectItem>
-            <SimpleSelectItem value="need">Needs</SimpleSelectItem>
-          </SimpleSelect>
-          
           <div className="ml-auto">
             <Link to="/post/new">
               <Button className="shadow-md bg-primary hover:bg-primary/90 text-white" size="lg">
                 <Leaf className="w-4 h-4 mr-2" />
-                Create New Post
+                Publish an Offer
               </Button>
             </Link>
           </div>
@@ -310,17 +268,30 @@ export default function Home() {
                         key={post.id}
                         position={[post.latitude, post.longitude]}
                         icon={customIcon}
-                        eventHandlers={{
-                          click: () => handlePostClick(post),
-                        }}
                       >
                         <Popup>
-                          <div className="p-2 min-w-[150px]">
-                            <h3 className="font-semibold text-sm mb-1">{post.title}</h3>
-                            <p className="text-xs text-gray-600 mb-2">{post.location}</p>
+                          <div className="p-3 min-w-[200px]">
+                            <div className="mb-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <SimpleAvatar
+                                  src={post.avatar}
+                                  fallback={post.postedBy ? post.postedBy.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase() : "U"}
+                                  className="w-8 h-8"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-sm text-gray-900 truncate">{post.title}</h3>
+                                  <p className="text-xs text-gray-500 truncate">{post.postedBy}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+                                <p className="text-xs text-gray-600 leading-relaxed">{post.location}</p>
+                              </div>
+                            </div>
                             <button
-                              className="w-full px-3 py-1.5 bg-primary text-white text-xs rounded-md hover:bg-primary/90 transition-colors cursor-pointer"
-                              onClick={() => {
+                              className="w-full px-4 py-2 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary/90 transition-colors cursor-pointer shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 handlePostClick(post);
                               }}
                             >
@@ -374,7 +345,7 @@ export default function Home() {
             {!loading && offerPosts.length === 0 && (
               <p className="text-gray-500 text-center py-4">No offers found matching the filter.</p>
             )}
-            {offerPosts.map((post) => (
+            {displayedOfferPosts.map((post) => (
                 <Card
                   key={post.id}
                   className="hover:border-primary hover:shadow-md transition-all cursor-pointer border-primary/20"
@@ -437,7 +408,7 @@ export default function Home() {
              {!loading && needPosts.length === 0 && (
               <p className="text-gray-500 text-center py-4">No needs found matching the filter.</p>
             )}
-            {needPosts.map((post) => (
+            {displayedNeedPosts.map((post) => (
                 <Card
                   key={post.id}
                   className="hover:border-orange-500 hover:shadow-md transition-all cursor-pointer border-primary/20"
@@ -497,6 +468,21 @@ export default function Home() {
         </SimpleTabs>
       </div>
 
+      {/* See More Button */}
+      {!showAllPosts && (
+        (activeTab === 'offers' && offerPosts.length > 5) ||
+        (activeTab === 'needs' && needPosts.length > 5)
+      ) && (
+        <div className="flex justify-center py-6">
+          <Button
+            onClick={() => setShowAllPosts(true)}
+            className="bg-primary hover:bg-primary/90 text-white shadow-md"
+            size="lg"
+          >
+            See More Posts
+          </Button>
+        </div>
+      )}
 
       {/* Post Detail Dialog */}
       <SimpleDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -538,7 +524,20 @@ export default function Home() {
                   <span>Posted {selectedPost.postedDate}</span>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="text-primary">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-primary"
+                onClick={() => {
+                  setIsDialogOpen(false);
+                  // If viewing own profile, go to /my-profile, otherwise to /profile/:username
+                  if (selectedPost.postedBy === user?.username) {
+                    navigate('/my-profile');
+                  } else {
+                    navigate(`/profile/${selectedPost.postedBy}`);
+                  }
+                }}
+              >
                 <User className="w-4 h-4 mr-2" />
                 View Profile
               </Button>
@@ -546,7 +545,7 @@ export default function Home() {
 
             {/* Tags */}
             <div className="space-y-2">
-              <p className="text-sm text-gray-500">Categories</p>
+              <p className="text-sm text-gray-500">Tags</p>
                     <div className="flex flex-wrap gap-2">
                       {Array.isArray(selectedPost.tags) && selectedPost.tags.map((tag) => (
                         <Badge
@@ -626,47 +625,36 @@ export default function Home() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
-              <Button
-                className="flex-1 shadow-md"
-                size="lg"
-                onClick={() => {
-                  console.log(
-                    "Request sent:",
-                    selectedPost.title,
-                  );
-                  setIsDialogOpen(false);
-                }}
-              >
-                <Send className="w-4 h-4 mr-2" />
-                {selectedPost.type === "offer"
-                  ? "Request Service"
-                  : "Offer Help"}
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="flex-1 border-gray-300"
-                onClick={() => {
-                  console.log(
-                    "Send message:",
-                    selectedPost.postedBy,
-                  );
-                }}
-              >
-                <MessageCircle className="w-4 h-4 mr-2" />
-                Send Message
-              </Button>
-              {/* Edit Button (as Link) */}
-              <Link to={`/post/edit/${selectedPost.id}`} className="flex-1">
+              {/* Show Request Service/Offer Help only if user is not the post owner */}
+              {user && selectedPost.postedBy !== user.username && (
                 <Button
-                  variant="outline"
+                  className="flex-1 shadow-md"
                   size="lg"
-                  className="w-full border-yellow-500/30 hover:bg-yellow-500/5 text-yellow-600"
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    navigate(`/negotiate/${selectedPost.id}`);
+                  }}
                 >
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Edit
+                  <Send className="w-4 h-4 mr-2" />
+                  {selectedPost.type === "offer"
+                    ? "Request Service"
+                    : "Offer Help"}
                 </Button>
-              </Link>
+              )}
+              
+              {/* Show Edit button only if user is the post owner */}
+              {user && selectedPost.postedBy === user.username && (
+                <Link to={`/post/edit/${selectedPost.id}`} className="flex-1">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full border-yellow-500/30 hover:bg-yellow-500/5 text-yellow-600"
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </Link>
+              )}
             </div>
           </>
         )}
