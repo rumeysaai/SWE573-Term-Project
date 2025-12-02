@@ -1,9 +1,13 @@
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import api from '../api';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Label } from "../components/ui/label";
 import { Progress } from "../components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { SimpleTabs, SimpleTabsList, SimpleTabsTrigger, SimpleTabsContent } from "../components/ui/SimpleTabs";
+import { Loader2 } from "lucide-react";
 import {
   Clock,
   User,
@@ -17,6 +21,33 @@ import {
 } from "lucide-react";
 
 export default function Profile() {
+  const { username } = useParams();
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!username) {
+        setError('Username is required');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await api.get(`/users/${username}/`);
+        setProfileData(response.data);
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+        setError('Failed to load profile');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, [username]);
+
   const providedServices = [
     {
       title: "Story Telling For Kids",
@@ -47,15 +78,23 @@ export default function Profile() {
     },
   ];
 
-  const tagCloud = [
-    "Literature",
-    "Design",
-    "Education",
-    "Language",
-    "Cooking",
-    "Repair",
-    "Digital",
-  ];
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !profileData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error || 'Profile not found'}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -76,32 +115,27 @@ export default function Profile() {
             <div className="flex items-start gap-4 flex-1 w-full">
               <Avatar className="w-24 h-24 border-4 border-primary/20 shadow-md">
                 <AvatarImage
-                  src="https://images.unsplash.com/photo-1581065178047-8ee15951ede6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBwb3J0cmFpdCUyMHdvbWFufGVufDF8fHx8MTc2MTAyOTM3Mnww&ixlib=rb-4.1.0&q=80&w=1080"
-                  alt="Pınar Deniz"
+                  src={profileData.avatar || "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"}
+                  alt={profileData.username}
                 />
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  PD
+                  {profileData.username.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <Label>Pınar Deniz</Label>
-                    <p className="text-muted-foreground">StoryTeller_94</p>
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <MapPin className="w-4 h-4 text-primary" />
-                    <span>Kadıköy, Istanbul</span>
-                  </div>
-                </div>
-                {/* TimeBank Balance */}
-                <div className="bg-gradient-to-r from-primary/10 to-secondary/30 p-4 rounded-xl border border-primary/30 mt-3">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-primary" />
-                      TimeBank Balance
-                    </p>
-                    <p className="text-2xl text-primary font-normal">3 Hours</p>
+                    {(profileData.first_name || profileData.last_name) && (
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {[profileData.first_name, profileData.last_name].filter(Boolean).join(' ') || ''}
+                      </h3>
+                    )}
+                    <Label>{profileData.username}</Label>
+                    {profileData.bio && (
+                      <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                        {profileData.bio}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -124,17 +158,6 @@ export default function Profile() {
                     <span className="text-xs text-primary">4.8/5</span>
                   </div>
                   <Progress value={96} className="h-1.5" />
-                </div>
-                {/* Service Quality */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Award className="w-3 h-3 text-primary" />
-                      Service Quality
-                    </Label>
-                    <span className="text-xs text-primary">4.9/5</span>
-                  </div>
-                  <Progress value={98} className="h-1.5" />
                 </div>
                 {/* Time Management */}
                 <div className="space-y-1">

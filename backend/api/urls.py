@@ -14,4 +14,6 @@ urlpatterns = [
     path('login/', views.LoginView.as_view(), name='login'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
     path('session/', views.SessionView.as_view(), name='session'),
+    path('users/me/', views.MyProfileView.as_view(), name='my-profile'),  # Must come before users/<str:username>/
+    path('users/<str:username>/', views.UserProfileView.as_view(), name='user-profile'),
 ]

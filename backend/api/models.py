@@ -2,11 +2,18 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    avatar = models.URLField(max_length=500, blank=True, null=True, default="https://placehold.co/100x100/EBF8FF/3B82F6?text=User")
-    time_balance = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    avatar = models.TextField(blank=True, null=True, default="https://placehold.co/100x100/EBF8FF/3B82F6?text=User")
+    time_balance = models.DecimalField(
+        max_digits=4, 
+        decimal_places=2, 
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(10.0)]
+    )
+    bio = models.TextField(blank=True, null=True)
     interested_tags = models.ManyToManyField('Tag', blank=True, related_name='interested_profiles')
 
     def __str__(self):

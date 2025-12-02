@@ -10,10 +10,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 
 from .models import Post, Tag, Profile
+from django.contrib.auth.models import User
 from .serializers import (RegisterSerializer, 
     UserSerializer, 
     PostSerializer, 
-    TagSerializer)
+    TagSerializer,
+    ProfileSerializer)
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -66,10 +68,9 @@ class LogoutView(APIView):
         logout(request)
         return Response({"success": "Başarıyla çıkış yapıldı."}, status=status.HTTP_200_OK)
 
-# --- YENİ EKLENEN SESSION VIEW ---
-# (React App ilk yüklendiğinde "giriş yapmış mıyım?" diye kontrol edeceği yer)
+
 class SessionView(APIView):
-    permission_classes = [permissions.AllowAny] # İzinleri view içinde kontrol edeceğiz
+    permission_classes = [permissions.AllowAny] 
 
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated:
@@ -147,3 +148,69 @@ class PostViewSet(viewsets.ModelViewSet):
                 pass
         
         return queryset
+
+
+# User Profile Views
+class UserProfileView(APIView):
+    """
+    GET /api/users/<username>/ - Başka kullanıcıların profilini görüntüleme (Public veriler)
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, username, *args, **kwargs):
+        try:
+            user = User.objects.get(username=username)
+            # Public data: username, avatar, time_balance (opsiyonel)
+            return Response({
+                'id': user.id,
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'avatar': user.profile.avatar if hasattr(user, 'profile') else None,
+                'time_balance': float(user.profile.time_balance) if hasattr(user, 'profile') else 0.0,
+                'bio': user.profile.bio if hasattr(user, 'profile') and hasattr(user.profile, 'bio') else None,
+            })
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class MyProfileView(APIView):
+    """
+    GET /api/users/me/ - Kendi profilini görüntüleme
+    PUT /api/users/me/ - Kendi profilini düzenleme
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        """Kendi profilini görüntüle"""
+        return Response(UserSerializer(request.user).data)
+
+    def put(self, request, *args, **kwargs):
+        """Kendi profilini düzenle"""
+        user = request.user
+        profile = user.profile
+        
+        # Email update
+        if 'email' in request.data:
+            user.email = request.data['email']
+            user.save()
+        
+        # Profile update (avatar, bio, interested_tags)
+        if 'avatar' in request.data:
+            profile.avatar = request.data['avatar']
+        
+        if 'bio' in request.data:
+            profile.bio = request.data['bio']
+        
+        if 'interested_tags' in request.data:
+            tag_ids = request.data['interested_tags']
+            from .models import Tag
+            tags = Tag.objects.filter(id__in=tag_ids)
+            profile.interested_tags.set(tags)
+        
+        profile.save()
+        
+        return Response(UserSerializer(user).data)

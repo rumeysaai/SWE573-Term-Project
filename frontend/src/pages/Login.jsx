@@ -95,9 +95,6 @@ export default function Login() {
             </div>
           </form>
   
-          <div className="mt-8 pt-6 border-t border-gray-200 text-center text-xs text-gray-500">
-            <p>For demo purposes, you can log in with any email and password</p>
-          </div>
         </Card>
       </div>
     );
