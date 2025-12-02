@@ -251,7 +251,7 @@ export default function Profile() {
                   <div
                     key={post.id}
                     className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/post/${post.id}`)}
+                    onClick={() => navigate(`/post-details/${post.id}`)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -309,7 +309,7 @@ export default function Profile() {
                   <div
                     key={post.id}
                     className="border-2 border-accent/60 bg-accent/10 rounded-xl p-4 space-y-2 hover:border-accent/80 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/post/${post.id}`)}
+                    onClick={() => navigate(`/post-details/${post.id}`)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

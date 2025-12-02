@@ -18,6 +18,7 @@ import {
   Pencil,
   RefreshCw,
   Users,
+  Eye,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -625,6 +626,20 @@ export default function Home() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
+              {/* View Details button - visible to all users */}
+              <Button
+                variant="outline"
+                size="lg"
+                className="flex-1"
+                onClick={() => {
+                  setIsDialogOpen(false);
+                  navigate(`/post-details/${selectedPost.id}`);
+                }}
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                View Details
+              </Button>
+
               {/* Show Request Service/Offer Help only if user is not the post owner */}
               {user && selectedPost.postedBy !== user.username && (
                 <Button

@@ -7,6 +7,7 @@ import { Toaster } from 'sonner';
 
 import Home from './pages/Home';
 import Post from './pages/Post';
+import PostDetails from './pages/PostDetails';
 import Negotiation from './pages/Negotiation';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -169,8 +170,8 @@ export default function App() {
                 element={<ProtectedRoute><Post /></ProtectedRoute>}
               />
               <Route
-                path="/post/:postId"
-                element={<ProtectedRoute><Post /></ProtectedRoute>}
+                path="/post-details/:postId"
+                element={<ProtectedRoute><PostDetails /></ProtectedRoute>}
               />
               <Route
                 path="/negotiate/:postId"
