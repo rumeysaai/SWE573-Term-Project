@@ -21,8 +21,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Forum() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("events");
   const topics = [
     {
@@ -128,6 +130,7 @@ export default function Forum() {
               <Card
                 key={topic.id}
                 className="hover:border-primary hover:shadow-md transition-all cursor-pointer border-primary/20"
+                onClick={() => navigate(`/forum/${topic.id}`)}
               >
                 <CardHeader>
                   <CardTitle className="text-base text-primary">
@@ -205,6 +208,7 @@ export default function Forum() {
               <Card
                 key={topic.id}
                 className="hover:border-primary hover:shadow-md transition-all cursor-pointer border-primary/20 bg-gradient-to-r from-card to-secondary/10"
+                onClick={() => navigate(`/forum/${topic.id}`)}
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">

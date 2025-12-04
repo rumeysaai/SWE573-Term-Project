@@ -17,10 +17,10 @@ import {
   Users,
   Loader2,
   Edit2,
-  User,
   MessageCircle,
   Send,
   ThumbsUp,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
@@ -40,9 +40,12 @@ export default function PostDetails() {
     const fetchPost = async () => {
       try {
         setLoading(true);
-        const response = await api.get(`/posts/${postId}/`);
-        const postData = response.data;
+        const [postResponse, commentsResponse] = await Promise.all([
+          api.get(`/posts/${postId}/`),
+          api.get(`/comments/?post_id=${postId}`)
+        ]);
         
+        const postData = postResponse.data;
         const formattedPost = {
           id: postData.id,
           title: postData.title,
@@ -57,13 +60,31 @@ export default function PostDetails() {
           postedBy: postData.postedBy,
           avatar: postData.avatar,
           postedDate: postData.postedDate,
+          image: postData.image,
         };
         
         setPost(formattedPost);
         
-        // TODO: Fetch comments from API when comment endpoint is available
-        // For now, using empty array
-        setComments([]);
+        // Format comments from API response
+        let commentsData = [];
+        if (Array.isArray(commentsResponse.data)) {
+          commentsData = commentsResponse.data;
+        } else if (commentsResponse.data && typeof commentsResponse.data === 'object') {
+          commentsData = commentsResponse.data.results || [];
+        }
+        
+        const formattedComments = commentsData.map(comment => ({
+          id: comment.id,
+          postId: comment.post,
+          authorId: comment.user_id,
+          authorName: comment.username,
+          avatar: comment.avatar,
+          content: comment.text,
+          likes: comment.like_count || 0,
+          createdAt: comment.created_at,
+        }));
+        
+        setComments(formattedComments);
       } catch (err) {
         console.error('Error fetching post:', err);
         setError('Failed to load post');
@@ -77,7 +98,7 @@ export default function PostDetails() {
     }
   }, [postId]);
 
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
     if (!newComment.trim()) {
       toast.error('Please write a comment');
       return;
@@ -88,20 +109,31 @@ export default function PostDetails() {
       return;
     }
 
-    // TODO: Send comment to API when comment endpoint is available
-    const comment = {
-      id: `comment-${Date.now()}`,
-      postId: post.id,
-      authorId: user.id,
-      authorName: user.username,
-      content: newComment,
-      likes: 0,
-      createdAt: new Date(),
-    };
+    try {
+      const response = await api.post('/comments/', {
+        post: post.id,
+        text: newComment.trim(),
+      });
 
-    setComments([...comments, comment]);
-    setNewComment('');
-    toast.success('Comment added');
+      const commentData = response.data;
+      const newCommentObj = {
+        id: commentData.id,
+        postId: commentData.post,
+        authorId: commentData.user_id,
+        authorName: commentData.username,
+        avatar: commentData.avatar,
+        content: commentData.text,
+        likes: commentData.like_count || 0,
+        createdAt: commentData.created_at,
+      };
+
+      setComments([...comments, newCommentObj]);
+      setNewComment('');
+      toast.success('Comment added');
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      toast.error('Failed to add comment');
+    }
   };
 
   const handleLikeComment = (commentId) => {
@@ -114,6 +146,26 @@ export default function PostDetails() {
     } else {
       setLikedComments(prev => new Set(prev).add(commentId));
       toast.success('Comment liked');
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!user) {
+      toast.error('Please login to delete comments');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to delete this comment?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/comments/${commentId}/`);
+      setComments(comments.filter(comment => comment.id !== commentId));
+      toast.success('Comment deleted');
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      toast.error('Failed to delete comment');
     }
   };
 
@@ -180,6 +232,23 @@ export default function PostDetails() {
           </div>
 
           <Separator />
+
+          {/* Post Image */}
+          {post.image && (
+            <div className="w-full overflow-hidden rounded-lg border border-gray-200 shadow-md">
+              <img 
+                src={post.image} 
+                alt={post.title}
+                className="w-full h-96 object-cover object-center"
+                style={{ 
+                  objectFit: 'cover', 
+                  width: '100%', 
+                  height: '24rem',
+                  objectPosition: 'center'
+                }}
+              />
+            </div>
+          )}
 
           {/* Description */}
           <div>
@@ -354,9 +423,11 @@ export default function PostDetails() {
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
-                          <User className="w-4 h-4 text-slate-600" />
-                        </div>
+                        <SimpleAvatar
+                          src={comment.avatar}
+                          fallback={comment.authorName.substring(0, 2).toUpperCase()}
+                          className="w-8 h-8"
+                        />
                         <div>
                           <p className="font-medium text-sm">{comment.authorName}</p>
                           <p className="text-xs text-slate-500">
@@ -364,6 +435,16 @@ export default function PostDetails() {
                           </p>
                         </div>
                       </div>
+                      {user && comment.authorId === user.id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteComment(comment.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                     <p className="text-slate-700 mb-3 ml-10">{comment.content}</p>
                     <div className="flex items-center gap-4 ml-10">

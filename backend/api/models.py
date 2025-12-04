@@ -73,6 +73,9 @@ class Post(models.Model):
     longitude = models.FloatField(blank=True, null=True) 
     location_display_name = models.CharField(max_length=255, blank=True, null=True)
     
+    # Post image
+    image = models.TextField(blank=True, null=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -113,6 +116,31 @@ class Request(models.Model):
         return f"{self.requester.username} -> {self.post.title} ({self.status})"
 
 
+class Proposal(models.Model):
+    STATUS_CHOICES = [
+        ('waiting', 'Waiting'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+    ]
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='proposals')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_proposals')
+    
+    notes = models.TextField(blank=True, null=True)
+    timebank_hour = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')
+    date = models.DateField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.sender.username} -> {self.post.title} ({self.status})"
+
+
 class Chat(models.Model):
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name='messages', blank=True, null=True)
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
@@ -128,3 +156,20 @@ class Chat(models.Model):
 
     def __str__(self):
         return f"{self.sender.username} -> {self.receiver.username}: {self.message[:50]}"
+
+
+class Comment(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    
+    text = models.TextField()
+    like_count = models.IntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} commented on {self.post.title}: {self.text[:50]}"

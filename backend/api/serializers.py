@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
-from .models import Profile, Tag, Post
+from .models import Profile, Tag, Post, Comment, Proposal
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -117,6 +117,7 @@ class PostSerializer(serializers.ModelSerializer):
     
     
     postedDate = serializers.DateTimeField(source='created_at', read_only=True)
+    image = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     
     def create(self, validated_data):
         """Manually process tags in create operation"""
@@ -156,7 +157,66 @@ class PostSerializer(serializers.ModelSerializer):
             'date',
             'latitude',
             'longitude',
+            'image',
             'postedBy',   
-            'avatar',     
-            'postedDate', 
+            'avatar',
+            'postedDate',
         ]
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    avatar = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    like_count = serializers.IntegerField(read_only=True)
+
+    def get_avatar(self, obj):
+        """Get user's avatar from profile"""
+        if hasattr(obj.user, 'profile') and obj.user.profile.avatar:
+            return obj.user.profile.avatar
+        return None
+
+    class Meta:
+        model = Comment
+        fields = [
+            'id',
+            'post',
+            'user_id',
+            'username',
+            'avatar',
+            'text',
+            'like_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'like_count']
+
+
+class ProposalSerializer(serializers.ModelSerializer):
+    post_id = serializers.IntegerField(source='post.id', read_only=True)
+    post_title = serializers.CharField(source='post.title', read_only=True)
+    sender_id = serializers.IntegerField(source='sender.id', read_only=True)
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = Proposal
+        fields = [
+            'id',
+            'post',
+            'post_id',
+            'post_title',
+            'sender',
+            'sender_id',
+            'sender_username',
+            'notes',
+            'timebank_hour',
+            'status',
+            'date',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'sender', 'created_at', 'updated_at']
