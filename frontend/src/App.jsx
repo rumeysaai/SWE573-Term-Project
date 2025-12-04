@@ -8,13 +8,18 @@ import { Toaster } from 'sonner';
 import Home from './pages/Home';
 import Post from './pages/Post';
 import PostDetails from './pages/PostDetails';
-import Negotiation from './pages/Negotiation';
+import Proposal from './pages/Proposal';
+import ProposalReview from './pages/ProposalReview';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Profile from './pages/Profile';
 import MyProfile from './pages/MyProfile';
 import Forum from './pages/Forum';
+import ForumDetails from './pages/ForumDetails';
 import Admin from './pages/Admin';
+import HowTo from './pages/HowTo';
+import TimeBank from './pages/TimeBank';
+import About from './pages/About';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 
@@ -175,7 +180,11 @@ export default function App() {
               />
               <Route
                 path="/negotiate/:postId"
-                element={<ProtectedRoute><Negotiation /></ProtectedRoute>}
+                element={<ProtectedRoute><Proposal /></ProtectedRoute>}
+              />
+              <Route
+                path="/proposal-review/:proposalId"
+                element={<ProtectedRoute><ProposalReview /></ProtectedRoute>}
               />
               <Route
                 path="/my-profile"
@@ -188,6 +197,22 @@ export default function App() {
               <Route
                 path="/forum"
                 element={<ProtectedRoute><Forum /></ProtectedRoute>}
+              />
+              <Route
+                path="/forum/:topicId"
+                element={<ProtectedRoute><ForumDetails /></ProtectedRoute>}
+              />
+              <Route
+                path="/how-to"
+                element={<ProtectedRoute><HowTo /></ProtectedRoute>}
+              />
+              <Route
+                path="/timebank"
+                element={<ProtectedRoute><TimeBank /></ProtectedRoute>}
+              />
+              <Route
+                path="/about"
+                element={<ProtectedRoute><About /></ProtectedRoute>}
               />
               <Route
                 path="/admin-panel"

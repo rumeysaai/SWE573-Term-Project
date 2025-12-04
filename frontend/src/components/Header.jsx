@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
 import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { Badge } from './ui/badge';
+import api from '../api';
 import {
   Menu,
   Bell,
@@ -15,7 +18,12 @@ import {
   Shield,
   LogOut,
   X,
+  Send,
+  Loader2,
+  Calendar,
+  MapPin,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -23,6 +31,10 @@ export function Header() {
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
+  const [sentProposals, setSentProposals] = useState([]);
+  const [receivedProposals, setReceivedProposals] = useState([]);
+  const [loadingProposals, setLoadingProposals] = useState(false);
 
   // Debug: Check user admin status
   useEffect(() => {
@@ -47,6 +59,38 @@ export function Header() {
     setShowMenu(false);
   };
 
+  const fetchProposals = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingProposals(true);
+      
+      // Fetch sent proposals
+      const sentResponse = await api.get('/proposals/', { params: { sent: 'true' } });
+      const sentData = Array.isArray(sentResponse.data) ? sentResponse.data : (sentResponse.data?.results || []);
+      setSentProposals(sentData);
+      
+      // Fetch received proposals
+      const receivedResponse = await api.get('/proposals/', { params: { received: 'true' } });
+      const receivedData = Array.isArray(receivedResponse.data) ? receivedResponse.data : (receivedResponse.data?.results || []);
+      setReceivedProposals(receivedData);
+    } catch (error) {
+      console.error('Error fetching proposals:', error);
+      toast.error('Failed to load proposals');
+    } finally {
+      setLoadingProposals(false);
+    }
+  };
+
+  const handleMessageClick = () => {
+    setShowMessages(!showMessages);
+    setShowMenu(false);
+    setShowNotifications(false);
+    if (!showMessages) {
+      fetchProposals();
+    }
+  };
+
   // Login/Register sayfalarında header gösterme
   if (location.pathname === '/login' || location.pathname === '/register') {
     return null;
@@ -69,6 +113,42 @@ export function Header() {
               Community-Oriented Service Offering Platform
             </p>
           </div>
+        </div>
+
+        {/* Center - Navigation Links */}
+        <div className="hidden lg:flex items-center gap-6 flex-1 justify-center">
+          <button
+            onClick={() => navigate('/')}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              location.pathname === '/' ? 'text-primary' : 'text-gray-700'
+            }`}
+          >
+            Home
+          </button>
+          <button
+            onClick={() => navigate('/forum')}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              location.pathname === '/forum' ? 'text-primary' : 'text-gray-700'
+            }`}
+          >
+            Forum
+          </button>
+          <button
+            onClick={() => navigate('/how-to')}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              location.pathname === '/how-to' ? 'text-primary' : 'text-gray-700'
+            }`}
+          >
+            How To
+          </button>
+          <button
+            onClick={() => navigate('/about')}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              location.pathname === '/about' ? 'text-primary' : 'text-gray-700'
+            }`}
+          >
+            About
+          </button>
         </div>
 
         {/* Right side - Buttons */}
@@ -113,11 +193,7 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
-              navigate('/forum');
-              setShowMenu(false);
-              setShowNotifications(false);
-            }}
+            onClick={handleMessageClick}
             className="hover:bg-primary/10"
           >
             <MessageCircle className="w-5 h-5 text-primary" />
@@ -218,6 +294,178 @@ export function Header() {
               </div>
             )}
           </div>
+
+          {/* Messages Drawer */}
+          {showMessages && (
+            <>
+              {/* Overlay */}
+              <div
+                className="fixed inset-0 bg-black/50 z-40"
+                onClick={() => setShowMessages(false)}
+              />
+              
+              {/* Messages Drawer */}
+              <div className="fixed top-0 right-0 h-screen w-80 bg-white border-l border-gray-200 shadow-xl z-50 overflow-y-auto">
+                <div className="p-6">
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold text-gray-900">Proposals</h2>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowMessages(false)}
+                      className="hover:bg-gray-100"
+                    >
+                      <X className="w-5 h-5" />
+                    </Button>
+                  </div>
+
+                  {loadingProposals ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Sent Proposals */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <Send className="w-5 h-5 text-primary" />
+                          <h3 className="text-lg font-semibold text-gray-900">Sent Proposals</h3>
+                        </div>
+                        {sentProposals.length === 0 ? (
+                          <Card>
+                            <CardContent className="py-8 text-center text-gray-500">
+                              <Send className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                              <p>No sent proposals</p>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          <div className="space-y-3">
+                            {sentProposals.map((proposal) => (
+                              <Card 
+                                key={proposal.id} 
+                                className="hover:shadow-md transition-shadow cursor-pointer"
+                                onClick={() => {
+                                  navigate(`/negotiate/${proposal.post_id}`);
+                                  setShowMessages(false);
+                                }}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-sm text-gray-900 mb-1">
+                                        {proposal.post_title}
+                                      </h4>
+                                    </div>
+                                    <Badge
+                                      variant={
+                                        proposal.status === 'accepted'
+                                          ? 'default'
+                                          : proposal.status === 'declined'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                      }
+                                    >
+                                      {proposal.status === 'accepted'
+                                        ? 'Accepted'
+                                        : proposal.status === 'declined'
+                                        ? 'Declined'
+                                        : 'Waiting'}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                                    <span className="flex items-center gap-1">
+                                      <MapPin className="w-3 h-3" />
+                                      {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
+                                    </span>
+                                    {proposal.date && (
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="w-3 h-3" />
+                                        {new Date(proposal.date).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Received Proposals */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <MessageCircle className="w-5 h-5 text-primary" />
+                          <h3 className="text-lg font-semibold text-gray-900">Received Proposals</h3>
+                        </div>
+                        {receivedProposals.length === 0 ? (
+                          <Card>
+                            <CardContent className="py-8 text-center text-gray-500">
+                              <MessageCircle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                              <p>No received proposals</p>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          <div className="space-y-3">
+                            {receivedProposals.map((proposal) => (
+                              <Card 
+                                key={proposal.id} 
+                                className="hover:shadow-md transition-shadow cursor-pointer"
+                                onClick={() => {
+                                  navigate(`/proposal-review/${proposal.id}`);
+                                  setShowMessages(false);
+                                }}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-sm text-gray-900 mb-1">
+                                        {proposal.post_title}
+                                      </h4>
+                                      <span className="text-xs text-gray-500">
+                                        from {proposal.sender_username}
+                                      </span>
+                                    </div>
+                                    <Badge
+                                      variant={
+                                        proposal.status === 'accepted'
+                                          ? 'default'
+                                          : proposal.status === 'declined'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                      }
+                                    >
+                                      {proposal.status === 'accepted'
+                                        ? 'Accepted'
+                                        : proposal.status === 'declined'
+                                        ? 'Declined'
+                                        : 'Waiting'}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                                    <span className="flex items-center gap-1">
+                                      <MapPin className="w-3 h-3" />
+                                      {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
+                                    </span>
+                                    {proposal.date && (
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="w-3 h-3" />
+                                        {new Date(proposal.date).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

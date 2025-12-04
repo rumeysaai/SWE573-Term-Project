@@ -41,7 +41,8 @@ export default function Post() {
     latitude: null,
     longitude: null,
     duration: '', 
-    tags: [] 
+    tags: [],
+    image: ''
   });
 
 
@@ -56,6 +57,7 @@ export default function Post() {
   const [tagInput, setTagInput] = useState(''); 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   
   // Location autocomplete states
   const [locationInput, setLocationInput] = useState('');
@@ -73,7 +75,7 @@ export default function Post() {
       setLoading(true);
       api.get(`/posts/${id}/`)
         .then(response => {
-          const { title, description, post_type, location, duration, tags, frequency, participant_count, date, latitude, longitude } = response.data;
+          const { title, description, post_type, location, duration, tags, frequency, participant_count, date, latitude, longitude, image } = response.data;
           
           setPost({ 
             title, 
@@ -83,10 +85,12 @@ export default function Post() {
             latitude: latitude || null,
             longitude: longitude || null,
             duration,
-            tags: tags 
+            tags: tags,
+            image: image || ''
           });
           
           setLocationInput(location || '');
+          setImagePreview(image || null);
           
           const hoursMatch = duration.match(/(\d+)/);
           if (hoursMatch) {
@@ -207,6 +211,35 @@ export default function Post() {
     setLocationSuggestions([]);
   };
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result;
+      setPost(prev => ({ ...prev, image: base64String }));
+      setImagePreview(base64String);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setPost(prev => ({ ...prev, image: '' }));
+    setImagePreview(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -226,6 +259,7 @@ export default function Post() {
       frequency: frequency || null,
       participant_count: participantCount || null,
       date: date || null,
+      image: post.image || null,
     };
 
     try {
@@ -376,6 +410,49 @@ export default function Post() {
                 onChange={(e) => setPost({ ...post, description: e.target.value })}
                 className="text-sm border-primary/20 resize-none"
               />
+            </div>
+
+            {/* Image Upload */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Post Image (Optional)</Label>
+              {imagePreview ? (
+                <div className="relative">
+                  <img 
+                    src={imagePreview} 
+                    alt="Post preview" 
+                    className="w-full max-w-md h-64 object-cover rounded-lg border border-gray-200"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveImage}
+                    className="absolute top-2 right-2 bg-white hover:bg-gray-100"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <Label 
+                    htmlFor="image-upload" 
+                    className="cursor-pointer flex flex-col items-center gap-2"
+                  >
+                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                      <PenLine className="w-6 h-6 text-gray-400" />
+                    </div>
+                    <span className="text-sm text-gray-600">Click to upload image</span>
+                    <span className="text-xs text-gray-400">JPG, PNG, GIF (Max 5MB)</span>
+                  </Label>
+                </div>
+              )}
             </div>
 
             {/* Tags */}

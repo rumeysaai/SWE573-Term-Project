@@ -99,6 +99,7 @@ export default function Home() {
           date: post.date,
           postedBy: post.postedBy,
           avatar: post.avatar,
+          image: post.image,
           postedDate: formatDistanceToNow(new Date(post.postedDate), {
             addSuffix: true,
             locale: tr,
@@ -543,6 +544,17 @@ export default function Home() {
                 View Profile
               </Button>
             </div>
+
+            {/* Post Image */}
+            {selectedPost.image && (
+              <div>
+                <img 
+                  src={selectedPost.image} 
+                  alt={selectedPost.title}
+                  className="w-full rounded-lg border border-gray-200 shadow-sm object-cover max-h-64"
+                />
+              </div>
+            )}
 
             {/* Tags */}
             <div className="space-y-2">

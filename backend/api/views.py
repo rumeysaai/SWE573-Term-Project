@@ -9,13 +9,15 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 
-from .models import Post, Tag, Profile
+from .models import Post, Tag, Profile, Comment, Proposal
 from django.contrib.auth.models import User
 from .serializers import (RegisterSerializer, 
     UserSerializer, 
     PostSerializer, 
     TagSerializer,
-    ProfileSerializer)
+    ProfileSerializer,
+    CommentSerializer,
+    ProposalSerializer)
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -222,3 +224,73 @@ class MyProfileView(APIView):
         profile.save()
         
         return Response(UserSerializer(user).data)
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Comment model
+    GET /api/comments/ - List all comments
+    GET /api/comments/<id>/ - Get comment details
+    POST /api/comments/ - Create a new comment
+    PUT /api/comments/<id>/ - Update a comment
+    DELETE /api/comments/<id>/ - Delete a comment
+    """
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def perform_create(self, serializer):
+        """Set the user to the current authenticated user"""
+        serializer.save(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        """Only allow comment owner to delete their comment"""
+        if instance.user != self.request.user:
+            raise PermissionDenied("You can only delete your own comments.")
+        instance.delete()
+
+    def get_queryset(self):
+        """Filter comments by post if post_id query parameter is provided"""
+        queryset = super().get_queryset()
+        post_id = self.request.query_params.get('post_id', None)
+        if post_id is not None:
+            queryset = queryset.filter(post_id=post_id)
+        return queryset
+
+
+class ProposalViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Proposal model
+    GET /api/proposals/ - List all proposals (filtered by user)
+    GET /api/proposals/<id>/ - Get proposal details
+    POST /api/proposals/ - Create a new proposal
+    PUT /api/proposals/<id>/ - Update a proposal
+    DELETE /api/proposals/<id>/ - Delete a proposal
+    """
+    serializer_class = ProposalSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Filter proposals by sender (sent proposals), post owner (received proposals), or post ID"""
+        queryset = Proposal.objects.all()
+        
+        # Filter by post ID if provided
+        post_id = self.request.query_params.get('post', None)
+        if post_id is not None:
+            queryset = queryset.filter(post_id=post_id)
+        
+        # Filter by sent proposals (proposals sent by current user)
+        sent = self.request.query_params.get('sent', None)
+        if sent == 'true':
+            queryset = queryset.filter(sender=self.request.user)
+        
+        # Filter by received proposals (proposals for posts owned by current user)
+        received = self.request.query_params.get('received', None)
+        if received == 'true':
+            queryset = queryset.filter(post__posted_by=self.request.user)
+        
+        return queryset.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        """Set the sender to the current authenticated user"""
+        serializer.save(sender=self.request.user)
