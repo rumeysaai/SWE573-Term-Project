@@ -21,6 +21,9 @@ import {
   Smile,
   MessageCircle,
   Package,
+  MessageSquare,
+  Star,
+  XCircle,
 } from "lucide-react";
 
 export default function Profile() {
@@ -30,6 +33,7 @@ export default function Profile() {
   const [profileData, setProfileData] = useState(null);
   const [userPosts, setUserPosts] = useState([]);
   const [completedJobs, setCompletedJobs] = useState([]);
+  const [cancelledJobs, setCancelledJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -43,6 +47,7 @@ export default function Profile() {
 
       try {
         setLoading(true);
+        console.log('Profile fetchProfile started for username:', username);
         const [profileResponse, postsResponse] = await Promise.all([
           api.get(`/users/${username}/`),
           api.get('/posts/', { params: { posted_by__username: username } }),
@@ -87,13 +92,17 @@ export default function Profile() {
         ]);
 
         // Combine all proposals and filter by the profile user's ID
-        const allProposals = [
-          ...(sentProposalsResponse.data || []),
-          ...(receivedProposalsResponse.data || []),
-        ];
+        // Handle both array and paginated response formats
+        const sentProposals = Array.isArray(sentProposalsResponse.data) 
+          ? sentProposalsResponse.data 
+          : (sentProposalsResponse.data?.results || []);
+        const receivedProposals = Array.isArray(receivedProposalsResponse.data) 
+          ? receivedProposalsResponse.data 
+          : (receivedProposalsResponse.data?.results || []);
+        
+        const allProposals = [...sentProposals, ...receivedProposals];
 
         // Filter proposals that belong to the profile user (not the authenticated user)
-        // and are completed
         const userProposals = allProposals.filter(proposal => {
           // Check if this proposal belongs to the profile user
           const belongsToUser = 
@@ -102,6 +111,17 @@ export default function Profile() {
           
           return belongsToUser;
         });
+
+        // Debug: Log proposals to check job_status
+        console.log('Total user proposals:', userProposals.length);
+        console.log('User proposals with job_status:', userProposals.map(p => ({
+          id: p.id,
+          status: p.status,
+          job_status: p.job_status,
+          post_type: p.post_type || p.post?.post_type,
+          requester_id: p.requester_id,
+          provider_id: p.provider_id
+        })));
 
         // Filter completed proposals where:
         // - For 'offer' posts: user is provider (post owner)
@@ -121,6 +141,35 @@ export default function Profile() {
           return false;
         });
 
+        // Filter cancelled job proposals (proposals with cancelled jobs)
+        // For cancelled jobs, we need to check who received the refund
+        const cancelledJobProposals = userProposals.filter(proposal => {
+          // Only include proposals with cancelled jobs
+          if (!proposal.job_status || proposal.job_status !== 'cancelled') {
+            return false;
+          }
+          
+          const postType = proposal.post_type || proposal.post?.post_type;
+          const isProvider = proposal.provider_id === userId;
+          const isRequester = proposal.requester_id === userId;
+
+          // For 'offer': requester gets refund
+          // For 'need': provider gets refund
+          if (postType === 'offer') {
+            return isRequester; // Offer: requester gets refund
+          } else if (postType === 'need') {
+            return isProvider; // Need: provider gets refund
+          }
+          return false;
+        });
+
+        console.log('Cancelled job proposals found:', cancelledJobProposals.length);
+        console.log('Cancelled job proposals details:', cancelledJobProposals.map(p => ({
+          id: p.id,
+          status: p.status,
+          job_status: p.job_status,
+          post_type: p.post_type || p.post?.post_type
+        })));
 
         // Fetch post details for completed proposals
         const completedJobsWithPosts = await Promise.all(
@@ -144,6 +193,32 @@ export default function Profile() {
         // Filter out null values
         const validJobs = completedJobsWithPosts.filter(job => job !== null);
         setCompletedJobs(validJobs);
+
+        // Fetch post details for cancelled job proposals
+        const cancelledJobsWithPosts = await Promise.all(
+          cancelledJobProposals.map(async (proposal) => {
+            try {
+              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
+              return {
+                proposalId: proposal.id,
+                post: postResponse.data,
+                timebank_hour: proposal.timebank_hour,
+                proposed_date: proposal.proposed_date,
+                updated_at: proposal.updated_at || proposal.updatedAt,
+                cancelled_by: proposal.job_cancelled_by_username,
+                cancellation_reason: proposal.job_cancellation_reason,
+                job_status: 'cancelled',
+              };
+            } catch (err) {
+              console.error('Error fetching post for cancelled proposal:', err);
+              return null;
+            }
+          })
+        );
+
+        // Filter out null values
+        const validCancelledJobs = cancelledJobsWithPosts.filter(job => job !== null);
+        setCancelledJobs(validCancelledJobs);
       } catch (err) {
         console.error('Error fetching profile:', err);
         setError('Failed to load profile');
@@ -195,7 +270,7 @@ export default function Profile() {
             <div className="flex items-start gap-4 flex-1 w-full">
               <Avatar className="w-24 h-24 border-4 border-primary/20 shadow-md">
                 <AvatarImage
-                  src={profileData.avatar || "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"}
+                  src={profileData.profile?.avatar || profileData.avatar || "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"}
                   alt={profileData.username}
                 />
                 <AvatarFallback className="bg-primary text-primary-foreground">
@@ -211,9 +286,9 @@ export default function Profile() {
                       </h3>
                     )}
                     <Label>{profileData.username}</Label>
-                    {profileData.bio && (
+                    {(profileData.profile?.bio || profileData.bio) && (
                       <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                        {profileData.bio}
+                        {profileData.profile?.bio || profileData.bio}
                       </p>
                     )}
                   </div>
@@ -235,45 +310,107 @@ export default function Profile() {
 
             {/* Right Side: Rating Categories (Compact) */}
             <div className="w-full lg:w-auto lg:min-w-[320px] space-y-3 bg-gradient-to-r from-primary/5 to-secondary/10 p-4 rounded-xl border border-primary/20 flex flex-col">
-              <h4 className="flex items-center gap-2 text-primary text-sm">
-                <Award className="w-4 h-4" />
-                Community Ratings
-              </h4>
-              <div className="space-y-3">
-                {/* Reliability */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Shield className="w-3 h-3 text-primary" />
-                      Reliability
-                    </Label>
-                    <span className="text-xs text-primary">4.8/5</span>
+              <div className="flex items-center justify-between">
+                <h4 className="flex items-center gap-2 text-primary text-sm">
+                  <Award className="w-4 h-4" />
+                  Community Ratings
+                </h4>
+                {profileData.profile?.review_averages?.total_reviews > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-primary">
+                    <Star className="w-3 h-3 fill-primary" />
+                    <span>{profileData.profile.review_averages.overall.toFixed(1)}/5</span>
+                    <span className="text-muted-foreground">({profileData.profile.review_averages.total_reviews})</span>
                   </div>
-                  <Progress value={96} className="h-1.5" />
-                </div>
-                {/* Time Management */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Timer className="w-3 h-3 text-primary" />
-                      Time Management
-                    </Label>
-                    <span className="text-xs text-primary">4.7/5</span>
-                  </div>
-                  <Progress value={94} className="h-1.5" />
-                </div>
-                {/* Friendliness */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Smile className="w-3 h-3 text-primary" />
-                      Friendliness
-                    </Label>
-                    <span className="text-xs text-primary">5.0/5</span>
-                  </div>
-                  <Progress value={100} className="h-1.5" />
-                </div>
+                )}
               </div>
+              {profileData.profile?.review_averages?.total_reviews > 0 ? (
+                <div className="space-y-3">
+                  {/* Overall Rating */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Star className="w-3 h-3 text-primary" />
+                        Overall Rating
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {profileData.profile.review_averages.overall.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(profileData.profile.review_averages.overall / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Friendliness */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Smile className="w-3 h-3 text-primary" />
+                        Friendliness
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {profileData.profile.review_averages.friendliness.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(profileData.profile.review_averages.friendliness / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Time Management */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Timer className="w-3 h-3 text-primary" />
+                        Time Management
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {profileData.profile.review_averages.time_management.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(profileData.profile.review_averages.time_management / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Reliability */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Shield className="w-3 h-3 text-primary" />
+                        Reliability
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {profileData.profile.review_averages.reliability.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(profileData.profile.review_averages.reliability / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Communication */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <MessageSquare className="w-3 h-3 text-primary" />
+                        Communication
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {profileData.profile.review_averages.communication.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(profileData.profile.review_averages.communication / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Work Quality */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Award className="w-3 h-3 text-primary" />
+                        Work Quality
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {profileData.profile.review_averages.work_quality.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(profileData.profile.review_averages.work_quality / 5) * 100} className="h-1.5" />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  <Award className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No reviews yet</p>
+                  <p className="text-xs mt-1">Be the first to review this user!</p>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
@@ -425,13 +562,15 @@ export default function Profile() {
             </SimpleTabsContent>
 
             <SimpleTabsContent value="history" className="space-y-3 mt-6">
-              {completedJobs.length === 0 ? (
+              {(completedJobs.length === 0 && cancelledJobs.length === 0) ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Award className="w-12 h-12 mx-auto mb-4 text-primary/50" />
                   <p>No service history available yet.</p>
                 </div>
               ) : (
-                completedJobs.map((job) => {
+                <>
+                  {/* Completed Jobs */}
+                  {completedJobs.map((job) => {
                   const post = job.post;
                   return (
                     <div
@@ -495,7 +634,86 @@ export default function Profile() {
                       )}
                     </div>
                   );
-                })
+                  })}
+                  
+                  {/* Cancelled Jobs (Refunds) */}
+                  {cancelledJobs.map((job) => {
+                    const post = job.post;
+                    return (
+                      <div
+                        key={`cancelled-${job.proposalId}`}
+                        className="border-2 border-red-200 bg-red-50 rounded-xl p-4 space-y-2 hover:border-red-300 transition-colors cursor-pointer"
+                        onClick={() => navigate(`/post-details/${post.id}`)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="text-red-900 font-medium">{post.title}</p>
+                            <p className="text-sm text-red-700 mt-1">
+                              {job.updated_at 
+                                ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
+                                : job.proposed_date
+                                ? formatDistanceToNow(new Date(job.proposed_date), { addSuffix: true })
+                                : 'Recently'}
+                            </p>
+                            {post.description && (
+                              <p className="text-sm text-red-800 mt-2 line-clamp-2">
+                                {post.description}
+                              </p>
+                            )}
+                            <div className="mt-2 flex items-center gap-4 text-xs text-red-700">
+                              <span className="flex items-center gap-1">
+                                <XCircle className="w-3 h-3" />
+                                {job.cancellation_reason === 'not_showed_up' 
+                                  ? 'Cancelled - Transferred'
+                                  : 'Cancelled - Refunded'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Timer className="w-3 h-3" />
+                                {job.cancellation_reason === 'not_showed_up' 
+                                  ? `+${job.timebank_hour} hours transferred`
+                                  : `+${job.timebank_hour} hours refunded`}
+                              </span>
+                              {job.cancelled_by && (
+                                <span className="text-red-600">
+                                  Cancelled by {job.cancelled_by}
+                                  {job.cancellation_reason === 'not_showed_up' && ' (Not Showed Up)'}
+                                  {job.cancellation_reason === 'other' && ' (Other)'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {post.duration && (
+                            <Badge
+                              variant="outline"
+                              className="border-red-300 text-red-700 bg-red-100"
+                            >
+                              {post.duration}
+                            </Badge>
+                          )}
+                        </div>
+                        {post.tags && post.tags.length > 0 && (
+                          <div className="flex gap-2 flex-wrap">
+                            {post.tags.map((tag, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {post.location && (
+                          <div className="flex items-center gap-1 text-xs text-red-600">
+                            <MapPin className="w-3 h-3" />
+                            <span>{post.location}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </SimpleTabsContent>
           </SimpleTabs>

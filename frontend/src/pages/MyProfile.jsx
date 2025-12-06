@@ -9,7 +9,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown, MessageSquare, Star } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 
@@ -63,6 +63,7 @@ export default function MyProfile() {
           avatar: userData.profile?.avatar || '',
           time_balance: userData.profile?.time_balance || 0,
           interested_tags: userData.profile?.interested_tags || [],
+          review_averages: userData.profile?.review_averages || null,
         };
         
         setFormData(data);
@@ -244,10 +245,15 @@ export default function MyProfile() {
         api.get('/proposals/?received=true'),
       ]);
 
-      const allProposals = [
-        ...(sentResponse.data || []),
-        ...(receivedResponse.data || []),
-      ];
+      // Handle both array and paginated response formats
+      const sentProposals = Array.isArray(sentResponse.data) 
+        ? sentResponse.data 
+        : (sentResponse.data?.results || []);
+      const receivedProposals = Array.isArray(receivedResponse.data) 
+        ? receivedResponse.data 
+        : (receivedResponse.data?.results || []);
+      
+      const allProposals = [...sentProposals, ...receivedProposals];
 
       // Remove duplicates by ID
       const uniqueProposals = Array.from(
@@ -340,6 +346,89 @@ export default function MyProfile() {
               date: proposal.updated_at || proposal.created_at,
               proposalId: proposal.id,
             });
+          }
+        }
+
+        // Cancelled jobs (proposal status is accepted but job is cancelled): Balance refund or transfer
+        if (proposal.job_status === 'cancelled') {
+          const cancelledBy = proposal.job_cancelled_by_username;
+          const cancellationReason = proposal.job_cancellation_reason;
+          
+          // Debug log
+          console.log('Cancelled job proposal:', {
+            id: proposal.id,
+            job_status: proposal.job_status,
+            cancellation_reason: cancellationReason,
+            post_type: postType,
+            isProvider,
+            isRequester,
+            provider_id: proposal.provider_id,
+            requester_id: proposal.requester_id,
+            user_id: user?.id
+          });
+
+          // Handle "not_showed_up" - transfer to other party
+          if (cancellationReason === 'not_showed_up') {
+            let amount = 0;
+            let description = '';
+
+            if (postType === 'offer' && isProvider) {
+              // Offer: transfer to provider (post owner) when requester didn't show up
+              amount = parseFloat(proposal.timebank_hour);
+              description = `Cancelled job for "${proposal.post_title || 'Post'}" (Offer - Transfer) - Not Showed Up`;
+              if (cancelledBy) {
+                description += ` by ${cancelledBy}`;
+              }
+            } else if (postType === 'need' && isRequester) {
+              // Need: transfer to requester when provider didn't show up
+              amount = parseFloat(proposal.timebank_hour);
+              description = `Cancelled job for "${proposal.post_title || 'Post'}" (Need - Transfer) - Not Showed Up`;
+              if (cancelledBy) {
+                description += ` by ${cancelledBy}`;
+              }
+            }
+
+            if (amount !== 0) {
+              history.push({
+                id: `cancelled-job-transfer-${proposal.id}`,
+                type: 'addition', // Transfer is an addition for the receiver
+                amount,
+                description,
+                date: proposal.updated_at || proposal.created_at,
+                proposalId: proposal.id,
+              });
+            }
+          } else {
+            // Handle "other" - refund to original payer
+            let amount = 0;
+            let description = '';
+
+            if (postType === 'offer' && isRequester) {
+              // Offer: refund to requester
+              amount = parseFloat(proposal.timebank_hour);
+              description = `Cancelled job for "${proposal.post_title || 'Post'}" (Offer - Refund)`;
+              if (cancelledBy) {
+                description += ` - Cancelled by ${cancelledBy}`;
+              }
+            } else if (postType === 'need' && isProvider) {
+              // Need: refund to provider
+              amount = parseFloat(proposal.timebank_hour);
+              description = `Cancelled job for "${proposal.post_title || 'Post'}" (Need - Refund)`;
+              if (cancelledBy) {
+                description += ` - Cancelled by ${cancelledBy}`;
+              }
+            }
+
+            if (amount !== 0) {
+              history.push({
+                id: `cancelled-job-${proposal.id}`,
+                type: 'refund',
+                amount,
+                description,
+                date: proposal.updated_at || proposal.created_at,
+                proposalId: proposal.id,
+              });
+            }
           }
         }
       });
@@ -505,45 +594,107 @@ export default function MyProfile() {
 
             {/* Community Ratings Card */}
             <div className="w-full lg:w-auto lg:min-w-[320px] space-y-3 bg-gradient-to-r from-primary/5 to-secondary/10 p-4 rounded-xl border border-primary/20 flex flex-col">
-              <h4 className="flex items-center gap-2 text-primary text-sm">
-                <Award className="w-4 h-4" />
-                Community Ratings
-              </h4>
-              <div className="space-y-3">
-                {/* Reliability */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Shield className="w-3 h-3 text-primary" />
-                      Reliability
-                    </Label>
-                    <span className="text-xs text-primary">4.8/5</span>
+              <div className="flex items-center justify-between">
+                <h4 className="flex items-center gap-2 text-primary text-sm">
+                  <Award className="w-4 h-4" />
+                  Community Ratings
+                </h4>
+                {formData.review_averages?.total_reviews > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-primary">
+                    <Star className="w-3 h-3 fill-primary" />
+                    <span>{formData.review_averages.overall.toFixed(1)}/5</span>
+                    <span className="text-muted-foreground">({formData.review_averages.total_reviews})</span>
                   </div>
-                  <Progress value={96} className="h-1.5" />
-                </div>
-                {/* Time Management */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Timer className="w-3 h-3 text-primary" />
-                      Time Management
-                    </Label>
-                    <span className="text-xs text-primary">4.7/5</span>
-                  </div>
-                  <Progress value={94} className="h-1.5" />
-                </div>
-                {/* Friendliness */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Smile className="w-3 h-3 text-primary" />
-                      Friendliness
-                    </Label>
-                    <span className="text-xs text-primary">5.0/5</span>
-                  </div>
-                  <Progress value={100} className="h-1.5" />
-                </div>
+                )}
               </div>
+              {formData.review_averages?.total_reviews > 0 ? (
+                <div className="space-y-3">
+                  {/* Overall Rating */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Star className="w-3 h-3 text-primary" />
+                        Overall Rating
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {formData.review_averages.overall.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(formData.review_averages.overall / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Friendliness */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Smile className="w-3 h-3 text-primary" />
+                        Friendliness
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {formData.review_averages.friendliness.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(formData.review_averages.friendliness / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Time Management */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Timer className="w-3 h-3 text-primary" />
+                        Time Management
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {formData.review_averages.time_management.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(formData.review_averages.time_management / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Reliability */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Shield className="w-3 h-3 text-primary" />
+                        Reliability
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {formData.review_averages.reliability.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(formData.review_averages.reliability / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Communication */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <MessageSquare className="w-3 h-3 text-primary" />
+                        Communication
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {formData.review_averages.communication.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(formData.review_averages.communication / 5) * 100} className="h-1.5" />
+                  </div>
+                  {/* Work Quality */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Award className="w-3 h-3 text-primary" />
+                        Work Quality
+                      </Label>
+                      <span className="text-xs text-primary">
+                        {formData.review_averages.work_quality.toFixed(1)}/5
+                      </span>
+                    </div>
+                    <Progress value={(formData.review_averages.work_quality / 5) * 100} className="h-1.5" />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  <Award className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No reviews yet</p>
+                  <p className="text-xs mt-1">Be the first to review this user!</p>
+                </div>
+              )}
             </div>
           </div>
         </Card>

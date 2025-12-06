@@ -11,10 +11,20 @@ import {
   MapPin,
   User,
   Loader2,
+  Star,
+  Smile,
+  Timer,
+  Shield,
+  MessageSquare,
+  Award,
+  XCircle,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import { Textarea } from '../components/ui/textarea';
+import { Label } from '../components/ui/label';
 
 export default function Approval() {
   const { proposalId } = useParams();
@@ -27,6 +37,19 @@ export default function Approval() {
   const [processing, setProcessing] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
+  const [existingReview, setExistingReview] = useState(null);
+  const [reviewData, setReviewData] = useState({
+    friendliness: 0,
+    time_management: 0,
+    reliability: 0,
+    communication: 0,
+    work_quality: 0,
+  });
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [showDeclineDialog, setShowDeclineDialog] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [cancellationReason, setCancellationReason] = useState('other');
+  const [declining, setDeclining] = useState(false);
 
   // Fetch user's approval-waiting proposals (if no proposalId)
   useEffect(() => {
@@ -44,22 +67,43 @@ export default function Approval() {
         const receivedResponse = await api.get('/proposals/', { params: { received: 'true' } });
         const receivedData = Array.isArray(receivedResponse.data) ? receivedResponse.data : (receivedResponse.data?.results || []);
         
-        // Combine and filter for accepted proposals
+        // Combine and filter for accepted or completed proposals (but exclude cancelled proposals)
+        // However, include proposals that have cancelled jobs, but only if the current user is involved
         const allProposals = [...sentData, ...receivedData];
-        const acceptedProposals = allProposals.filter(p => 
-          p.status === 'accepted' || p.status === 'completed'
-        );
+        const relevantProposals = allProposals.filter(p => {
+          // First check if proposal has cancelled job
+          if (p.job_status === 'cancelled') {
+            // Only show cancelled jobs if current user is involved
+            const isRequester = user?.id === p.requester_id;
+            const isProvider = user?.id === p.provider_id;
+            return isRequester || isProvider;
+          }
+          
+          // Exclude proposals with cancelled status (only if they don't have cancelled jobs)
+          if (p.status === 'cancelled') return false;
+          
+          // Include accepted or completed proposals
+          return (p.status === 'accepted' || p.status === 'completed');
+        });
         
         // Remove duplicates (in case a proposal appears in both)
-        const uniqueProposals = acceptedProposals.filter((p, index, self) =>
+        const uniqueProposals = relevantProposals.filter((p, index, self) =>
           index === self.findIndex((pr) => pr.id === p.id)
         );
         
-        // Separate completed and pending proposals
-        const completedProposals = uniqueProposals.filter(p => p.status === 'completed' || (p.provider_approved && p.requester_approved));
-        const pendingProposals = uniqueProposals.filter(p => p.status !== 'completed' && !(p.provider_approved && p.requester_approved));
+        // Separate cancelled jobs, completed, and pending proposals
+        const cancelledJobs = uniqueProposals.filter(p => p.job_status === 'cancelled');
+        const completedProposals = uniqueProposals.filter(p => 
+          p.job_status !== 'cancelled' && 
+          (p.status === 'completed' || (p.provider_approved && p.requester_approved))
+        );
+        const pendingProposals = uniqueProposals.filter(p => 
+          p.job_status !== 'cancelled' && 
+          p.status !== 'completed' && 
+          !(p.provider_approved && p.requester_approved)
+        );
         
-        // Sort by proposed_date (nearest date first)
+        // Sort by proposed_date (nearest date first for pending/completed, newest first for cancelled)
         const sortByDate = (a, b) => {
           const dateA = a.proposed_date ? new Date(a.proposed_date) : new Date(0);
           const dateB = b.proposed_date ? new Date(b.proposed_date) : new Date(0);
@@ -76,10 +120,28 @@ export default function Approval() {
           return dateA - dateB;
         };
         
+        // Sort cancelled jobs by date (newest first - reverse order)
+        const sortCancelledByDate = (a, b) => {
+          const dateA = a.proposed_date ? new Date(a.proposed_date) : new Date(0);
+          const dateB = b.proposed_date ? new Date(b.proposed_date) : new Date(0);
+          
+          // If same date, check time
+          if (dateA.getTime() === dateB.getTime() && a.proposed_time && b.proposed_time) {
+            const timeA = a.proposed_time.split(':').map(Number);
+            const timeB = b.proposed_time.split(':').map(Number);
+            const minutesA = timeA[0] * 60 + (timeA[1] || 0);
+            const minutesB = timeB[0] * 60 + (timeB[1] || 0);
+            return minutesB - minutesA; // Reverse for newest first
+          }
+          
+          return dateB - dateA; // Reverse for newest first
+        };
+        
         pendingProposals.sort(sortByDate);
         completedProposals.sort(sortByDate);
+        cancelledJobs.sort(sortCancelledByDate);
         
-        setProposals({ pending: pendingProposals, completed: completedProposals });
+        setProposals({ pending: pendingProposals, completed: completedProposals, cancelled: cancelledJobs });
       } catch (err) {
         console.error('Error fetching approval proposals:', err);
         toast.error('Failed to load proposals');
@@ -121,6 +183,27 @@ export default function Approval() {
     fetchProposal();
   }, [proposalId]);
 
+  // Fetch existing review for this proposal
+  useEffect(() => {
+    const fetchReview = async () => {
+      if (!proposalId || !user || !proposal) return;
+
+      try {
+        const response = await api.get('/reviews/', { params: { proposal: proposalId, reviewer: user.id } });
+        const reviews = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+        if (reviews.length > 0) {
+          setExistingReview(reviews[0]);
+        }
+      } catch (err) {
+        console.error('Error fetching review:', err);
+      }
+    };
+
+    if (proposal && (proposal.status === 'completed' || (proposal.provider_approved && proposal.requester_approved))) {
+      fetchReview();
+    }
+  }, [proposalId, user, proposal]);
+
   // Check if user can approve (after proposed date/time)
   const canApprove = () => {
     if (!proposal || !proposal.proposed_date) {
@@ -157,6 +240,8 @@ export default function Approval() {
 
   // Check if user is provider and can approve based on post type
   const canProviderApprove = () => {
+    // Don't show approve buttons if job is cancelled
+    if (proposal?.job_status === 'cancelled') return false;
     if (!user || !proposal) return false;
     if (user.id !== proposal.provider_id) return false;
     if (proposal.provider_approved) return false;
@@ -175,6 +260,8 @@ export default function Approval() {
 
   // Check if user is requester and can approve based on post type
   const canRequesterApprove = () => {
+    // Don't show approve buttons if job is cancelled
+    if (proposal?.job_status === 'cancelled') return false;
     if (!user || !proposal) return false;
     if (user.id !== proposal.requester_id) return false;
     if (proposal.requester_approved) return false;
@@ -273,6 +360,159 @@ export default function Approval() {
       toast.error(err.response?.data?.detail || 'Failed to approve proposal');
     } finally {
       setProcessing(false);
+    }
+  };
+
+  // Check if current user should review
+  const shouldShowReviewForm = () => {
+    if (!proposal || !user || !post) return false;
+    
+    // Only show if proposal is completed
+    const isCompleted = proposal.status === 'completed' || (proposal.provider_approved && proposal.requester_approved);
+    if (!isCompleted) return false;
+    
+    // Check if user already reviewed
+    if (existingReview) return false;
+    
+    // Determine who should review based on post type
+    const isOffer = post.post_type === 'offer';
+    const isRequester = user.id === proposal.requester_id;
+    const isProvider = user.id === proposal.provider_id;
+    
+    // Offer: requester reviews provider
+    // Need: provider reviews requester
+    if (isOffer && isRequester) return true;
+    if (!isOffer && isProvider) return true;
+    
+    return false;
+  };
+
+  // Get user to review
+  const getUserToReview = () => {
+    if (!proposal || !post) return null;
+    
+    const isOffer = post.post_type === 'offer';
+    if (isOffer) {
+      return {
+        id: proposal.provider_id,
+        username: proposal.provider_username,
+      };
+    } else {
+      return {
+        id: proposal.requester_id,
+        username: proposal.requester_username,
+      };
+    }
+  };
+
+  // Handle decline event
+  const handleDeclineEvent = async () => {
+    if (!proposal) return;
+
+    if (!declineReason.trim()) {
+      toast.error('Please provide a reason for declining');
+      return;
+    }
+
+    try {
+      setDeclining(true);
+      
+      // Decline job but keep proposal status as accepted
+      const updateData = { 
+        decline_job: true,
+        cancellation_reason: cancellationReason,
+        notes: `[Declined by ${user?.username}]: ${declineReason.trim()}`
+      };
+      await api.patch(`/proposals/${proposalId}/`, updateData);
+      
+      // Fetch updated user session to reflect balance changes
+      const userResponse = await api.get('/session/');
+      const updatedBalance = userResponse.data?.profile?.time_balance || 0;
+      
+      // Determine who gets refunded/transferred based on post type and cancellation reason
+      const isOffer = proposal.post_type === 'offer' || proposal.post?.post_type === 'offer';
+      const isCurrentUserRequester = user?.id === proposal.requester_id;
+      const isCurrentUserProvider = user?.id === proposal.provider_id;
+
+      if (cancellationReason === 'not_showed_up') {
+        // Balance transferred to other party
+        if ((isOffer && isCurrentUserRequester) || (!isOffer && isCurrentUserProvider)) {
+          toast.success(
+            `Event declined! ${proposal.timebank_hour} hours transferred to the other party. Your balance remains unchanged: ${updatedBalance} hours.`
+          );
+        } else {
+          toast.success(
+            `Event declined! ${proposal.timebank_hour} hours transferred to your balance. New balance: ${updatedBalance} hours.`
+          );
+        }
+      } else {
+        // Refund to original payer
+        if ((isOffer && isCurrentUserRequester) || (!isOffer && isCurrentUserProvider)) {
+          toast.success(
+            `Event declined! ${proposal.timebank_hour} hours refunded to your balance. New balance: ${updatedBalance} hours.`
+          );
+        } else {
+          toast.success('Event declined successfully');
+        }
+      }
+      
+      // Store who cancelled this proposal in sessionStorage
+      sessionStorage.setItem(`proposal_${proposalId}_cancelled_by`, user?.id?.toString() || '');
+      
+      // Refresh proposal data
+      const response = await api.get(`/proposals/${proposalId}/`);
+      setProposal(response.data);
+      
+      // Update user context
+      if (user) {
+        window.dispatchEvent(new CustomEvent('userUpdated'));
+      }
+      
+      // Notify Header to refresh proposals
+      window.dispatchEvent(new CustomEvent('proposalUpdated'));
+      
+      // Close dialog and reset
+      setShowDeclineDialog(false);
+      setDeclineReason('');
+    } catch (err) {
+      console.error('Error declining event:', err);
+      toast.error(err.response?.data?.detail || 'Failed to decline event');
+    } finally {
+      setDeclining(false);
+    }
+  };
+
+  // Handle review submission
+  const handleSubmitReview = async () => {
+    if (!proposal || !reviewData.friendliness || !reviewData.time_management || !reviewData.reliability || !reviewData.communication || !reviewData.work_quality) {
+      toast.error('Please rate all criteria');
+      return;
+    }
+
+    try {
+      setSubmittingReview(true);
+      await api.post('/reviews/', {
+        proposal: proposalId,
+        friendliness: reviewData.friendliness,
+        time_management: reviewData.time_management,
+        reliability: reviewData.reliability,
+        communication: reviewData.communication,
+        work_quality: reviewData.work_quality,
+      });
+      
+      toast.success('Review submitted successfully!');
+      
+      // Fetch updated review
+      const response = await api.get('/reviews/', { params: { proposal: proposalId, reviewer: user.id } });
+      const reviews = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      if (reviews.length > 0) {
+        setExistingReview(reviews[0]);
+      }
+    } catch (err) {
+      console.error('Error submitting review:', err);
+      toast.error(err.response?.data?.detail || 'Failed to submit review');
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -490,9 +730,100 @@ export default function Approval() {
             </div>
           )}
 
-          {/* Empty State */}
+          {/* Cancelled Jobs Section */}
+          {proposals.cancelled && proposals.cancelled.length > 0 && (
+            <div className="mt-8">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Cancelled Jobs</h3>
+              <div className="space-y-4">
+                {proposals.cancelled.map((p) => {
+                  const isCurrentUserCancelled = p.job_cancelled_by_id === user?.id;
+                  
+                  return (
+                    <Card 
+                      key={p.id} 
+                      className="shadow-md border-red-200 bg-red-50 hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => navigate(`/approval/${p.id}`)}
+                    >
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-lg text-slate-900 mb-2">
+                              {p.post_title}
+                            </h3>
+                            <div className="space-y-2 text-sm text-gray-600 mb-4">
+                              {p.proposed_date && (
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>
+                                    {new Date(p.proposed_date).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric'
+                                    })}
+                                    {p.proposed_time && ` at ${p.proposed_time}`}
+                                  </span>
+                                </div>
+                              )}
+                              {p.proposed_location && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="w-4 h-4" />
+                                  <span>{p.proposed_location}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4" />
+                                <span>{p.timebank_hour} hours</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 mb-2">
+                              <Badge 
+                                variant="outline"
+                                className="bg-red-600 hover:bg-red-700 text-white border-red-700"
+                              >
+                                Cancelled
+                              </Badge>
+                            </div>
+                            <div className="space-y-1 mt-2">
+                              <p className="text-sm text-red-700">
+                                {isCurrentUserCancelled
+                                  ? "You have cancelled this event."
+                                  : p.job_cancelled_by_username
+                                    ? `Cancelled by ${p.job_cancelled_by_username}`
+                                    : "This event has been cancelled."}
+                              </p>
+                              {p.job_cancellation_reason && (
+                                <p className="text-xs text-red-600">
+                                  <span className="font-medium">Reason: </span>
+                                  {p.job_cancellation_reason === 'not_showed_up' 
+                                    ? 'Not Showed Up'
+                                    : p.job_cancellation_reason === 'other'
+                                    ? 'Other'
+                                    : p.job_cancellation_reason}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/approval/${p.id}`);
+                            }}
+                          >
+                            View Details
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {(!proposals.pending || proposals.pending.length === 0) && 
-           (!proposals.completed || proposals.completed.length === 0) && (
+           (!proposals.completed || proposals.completed.length === 0) &&
+           (!proposals.cancelled || proposals.cancelled.length === 0) && (
             <Card className="shadow-md border-primary/20">
               <CardContent className="pt-6">
                 <div className="text-center py-12">
@@ -579,7 +910,36 @@ export default function Approval() {
           </div>
         </div>
 
-        {/* Approval Status */}
+        {/* Cancelled Job Info */}
+        {proposal.job_status === 'cancelled' && (
+          <Card className="shadow-md border-red-200 bg-red-50">
+            <CardHeader>
+              <CardTitle className="text-red-700">Cancelled Job</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-2">
+              <p className="text-sm text-red-700">
+                {proposal.job_cancelled_by_id === user?.id
+                  ? "You have cancelled this job."
+                  : proposal.job_cancelled_by_username
+                    ? `Cancelled by ${proposal.job_cancelled_by_username}`
+                    : "This job has been cancelled."}
+              </p>
+              {proposal.job_cancellation_reason && (
+                <p className="text-sm text-red-600 mt-2">
+                  <span className="font-medium">Cancellation Reason: </span>
+                  {proposal.job_cancellation_reason === 'not_showed_up' 
+                    ? 'Not Showed Up'
+                    : proposal.job_cancellation_reason === 'other'
+                    ? 'Other'
+                    : proposal.job_cancellation_reason}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Approval Status - Hide for cancelled jobs */}
+        {proposal?.job_status !== 'cancelled' && (
         <Card className="shadow-md border-primary/20">
           <CardHeader>
             <CardTitle className="text-primary text-slate-900">Approval Status</CardTitle>
@@ -600,7 +960,12 @@ export default function Approval() {
                     )}
                   </div>
                   <div>
-                    <p className="font-medium">{proposal.provider_username} (Post Owner)</p>
+                    <p 
+                      className="font-medium cursor-pointer hover:text-primary transition-colors"
+                      onClick={() => navigate(`/profile/${proposal.provider_username}`)}
+                    >
+                      {proposal.provider_username} (Post Owner)
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {proposal.provider_approved ? 'Approved' : 'Pending approval'}
                     </p>
@@ -625,7 +990,12 @@ export default function Approval() {
                     )}
                   </div>
                   <div>
-                    <p className="font-medium">{proposal.requester_username} (Requester)</p>
+                    <p 
+                      className="font-medium cursor-pointer hover:text-primary transition-colors"
+                      onClick={() => navigate(`/profile/${proposal.requester_username}`)}
+                    >
+                      {proposal.requester_username} (Requester)
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {proposal.requester_approved 
                         ? 'Approved' 
@@ -642,6 +1012,7 @@ export default function Approval() {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Event Details */}
         <Card className="shadow-md border-primary/20">
@@ -692,21 +1063,231 @@ export default function Approval() {
           </CardContent>
         </Card>
 
-        {/* Approval Action */}
-        {proposal.status === 'completed' || (proposal.provider_approved && proposal.requester_approved) ? (
+        {/* Review Section - Show after completion */}
+        {shouldShowReviewForm() && (
+          <Card className="shadow-md border-primary/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="w-5 h-5 text-primary" />
+                Review{' '}
+                <span 
+                  className="cursor-pointer hover:text-primary transition-colors"
+                  onClick={() => getUserToReview() && navigate(`/profile/${getUserToReview().username}`)}
+                >
+                  {getUserToReview()?.username}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <p className="text-sm text-muted-foreground">
+                Please rate your experience with{' '}
+                <span 
+                  className="cursor-pointer hover:text-primary transition-colors font-medium"
+                  onClick={() => getUserToReview() && navigate(`/profile/${getUserToReview().username}`)}
+                >
+                  {getUserToReview()?.username}
+                </span>{' '}
+                on the following criteria:
+              </p>
+              
+              {/* Friendliness */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Smile className="w-4 h-4 text-primary" />
+                  <label className="text-sm font-medium">Friendliness</label>
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      onClick={() => setReviewData({ ...reviewData, friendliness: rating })}
+                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
+                        reviewData.friendliness === rating
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-gray-300 hover:border-primary/50'
+                      }`}
+                    >
+                      {rating}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Time Management */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Timer className="w-4 h-4 text-primary" />
+                  <label className="text-sm font-medium">Time Management</label>
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      onClick={() => setReviewData({ ...reviewData, time_management: rating })}
+                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
+                        reviewData.time_management === rating
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-gray-300 hover:border-primary/50'
+                      }`}
+                    >
+                      {rating}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reliability */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" />
+                  <label className="text-sm font-medium">Reliability</label>
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      onClick={() => setReviewData({ ...reviewData, reliability: rating })}
+                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
+                        reviewData.reliability === rating
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-gray-300 hover:border-primary/50'
+                      }`}
+                    >
+                      {rating}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Communication */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-primary" />
+                  <label className="text-sm font-medium">Communication</label>
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      onClick={() => setReviewData({ ...reviewData, communication: rating })}
+                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
+                        reviewData.communication === rating
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-gray-300 hover:border-primary/50'
+                      }`}
+                    >
+                      {rating}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Work Quality */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Award className="w-4 h-4 text-primary" />
+                  <label className="text-sm font-medium">Work Quality</label>
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      onClick={() => setReviewData({ ...reviewData, work_quality: rating })}
+                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
+                        reviewData.work_quality === rating
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-gray-300 hover:border-primary/50'
+                      }`}
+                    >
+                      {rating}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Button
+                onClick={handleSubmitReview}
+                disabled={submittingReview || !reviewData.friendliness || !reviewData.time_management || !reviewData.reliability || !reviewData.communication || !reviewData.work_quality}
+                className="w-full bg-primary hover:bg-primary/90"
+                size="lg"
+              >
+                {submittingReview ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Star className="w-4 h-4 mr-2" />
+                    Submit Review
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Review Submitted Message */}
+        {existingReview && (
           <Card className="shadow-md border-green-200 bg-green-50">
             <CardContent className="pt-6">
-              <div className="text-center py-8">
-                <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+              <div className="text-center py-4">
+                <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
                 <p className="text-lg font-semibold text-green-900 mb-2">
-                  Event Completed
+                  Review Submitted
                 </p>
-                <p className="text-sm text-green-700">
-                  Both parties have approved this event. The event is now marked as completed.
+                <p className="text-sm text-green-700 mb-4">
+                  You have already reviewed this event.
                 </p>
+                <div className="flex flex-wrap justify-center gap-4 text-sm text-green-800">
+                  <div className="flex items-center gap-1">
+                    <Smile className="w-4 h-4" />
+                    <span>Friendliness: {existingReview.friendliness}/5</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Timer className="w-4 h-4" />
+                    <span>Time Management: {existingReview.time_management}/5</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Shield className="w-4 h-4" />
+                    <span>Reliability: {existingReview.reliability}/5</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Communication: {existingReview.communication}/5</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Award className="w-4 h-4" />
+                    <span>Work Quality: {existingReview.work_quality}/5</span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Approval Action */}
+        {proposal.status === 'completed' || (proposal.provider_approved && proposal.requester_approved) ? (
+          !shouldShowReviewForm() && !existingReview && (
+            <Card className="shadow-md border-green-200 bg-green-50">
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                  <p className="text-lg font-semibold text-green-900 mb-2">
+                    Event Completed
+                  </p>
+                  <p className="text-sm text-green-700">
+                    Both parties have approved this event. The event is now marked as completed.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )
         ) : (
           <>
             {isProvider && canProviderApprove() && (
@@ -717,24 +1298,35 @@ export default function Approval() {
                     <p className="text-sm text-muted-foreground mb-6">
                       Confirm that the event has been completed successfully.
                     </p>
-                    <Button
-                      onClick={handleProviderApprove}
-                      disabled={processing}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                      size="lg"
-                    >
-                      {processing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Approve as Provider
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-3 justify-center">
+                      <Button
+                        onClick={handleProviderApprove}
+                        disabled={processing}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        size="lg"
+                      >
+                        {processing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Approve as Provider
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={() => setShowDeclineDialog(true)}
+                        disabled={processing || declining}
+                        variant="destructive"
+                        size="lg"
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Decline
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -750,30 +1342,41 @@ export default function Approval() {
                         ? 'The post owner (provider) has approved. Confirm that the event has been completed successfully.'
                         : 'Confirm that the event has been completed successfully. Post owner (provider) will approve after your confirmation.'}
                     </p>
-                    <Button
-                      onClick={handleRequesterApprove}
-                      disabled={processing}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                      size="lg"
-                    >
-                      {processing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Approve as Requester
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-3 justify-center">
+                      <Button
+                        onClick={handleRequesterApprove}
+                        disabled={processing || declining}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        size="lg"
+                      >
+                        {processing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Approve as Requester
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={() => setShowDeclineDialog(true)}
+                        disabled={processing || declining}
+                        variant="destructive"
+                        size="lg"
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Decline
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {(!canProviderApprove() && !canRequesterApprove()) && (
+            {(!canProviderApprove() && !canRequesterApprove() && proposal?.job_status !== 'cancelled') && (
               <Card className="shadow-md border-primary/20">
                 <CardContent className="pt-6">
                   <div className="text-center py-8">
@@ -796,6 +1399,91 @@ export default function Approval() {
             )}
           </>
         )}
+
+        {/* Decline Event Dialog */}
+        <Dialog open={showDeclineDialog} onOpenChange={setShowDeclineDialog}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <XCircle className="w-5 h-5" />
+                Decline Event Completion
+              </DialogTitle>
+              <DialogDescription>
+                Please provide a reason for declining this event. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="cancellation-type">Cancellation Type</Label>
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancellation_reason"
+                      value="not_showed_up"
+                      checked={cancellationReason === 'not_showed_up'}
+                      onChange={(e) => setCancellationReason(e.target.value)}
+                      className="w-4 h-4 text-primary"
+                    />
+                    <span className="text-sm">Not Showed Up - Transfer balance to other party</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancellation_reason"
+                      value="other"
+                      checked={cancellationReason === 'other'}
+                      onChange={(e) => setCancellationReason(e.target.value)}
+                      className="w-4 h-4 text-primary"
+                    />
+                    <span className="text-sm">Other - Refund balance</span>
+                  </label>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="decline-reason">Reason for Decline</Label>
+                <Textarea
+                  id="decline-reason"
+                  placeholder="Explain why you are declining this event..."
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeclineDialog(false);
+                    setDeclineReason('');
+                    setCancellationReason('other');
+                  }}
+                  disabled={declining}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeclineEvent}
+                  disabled={declining || !declineReason.trim()}
+                >
+                  {declining ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Confirm Decline
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
