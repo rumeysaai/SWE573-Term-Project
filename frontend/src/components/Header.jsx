@@ -13,7 +13,6 @@ import {
   Leaf,
   Home as HomeIcon,
   PenLine,
-  User,
   MessageSquare,
   Shield,
   LogOut,
@@ -22,6 +21,7 @@ import {
   Loader2,
   Calendar,
   MapPin,
+  CheckCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -45,6 +45,19 @@ export function Header() {
       console.log('isAdmin calculated:', user?.is_staff || user?.is_superuser);
     }
   }, [user]);
+
+  // Disable body scroll when drawer is open
+  useEffect(() => {
+    if (showMessages) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    // Cleanup function to restore scroll when component unmounts
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showMessages]);
 
   const isAdmin = user?.is_staff || user?.is_superuser;
 
@@ -90,6 +103,21 @@ export function Header() {
       fetchProposals();
     }
   };
+
+  // Listen for proposal updates (e.g., when cancelled)
+  useEffect(() => {
+    if (!user) return;
+    
+    const handleProposalUpdate = () => {
+      fetchProposals();
+    };
+    
+    window.addEventListener('proposalUpdated', handleProposalUpdate);
+    return () => {
+      window.removeEventListener('proposalUpdated', handleProposalUpdate);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Login/Register sayfalarında header gösterme
   if (location.pathname === '/login' || location.pathname === '/register') {
@@ -225,9 +253,11 @@ export function Header() {
             {showMenu && (
               <div className="fixed top-0 right-0 h-screen w-80 bg-white border-l border-gray-200 shadow-xl z-50 overflow-y-auto">
                 <div className="p-6">
-                  <div className="flex items-center justify-between mb-8">
-                    <h2 className="text-lg font-semibold text-gray-900">The Hive</h2>
-                    <h4 className="text-lg font-semibold text-gray-900">Community Oriented Platform</h4>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex-1">
+                      <h2 className="text-lg font-semibold text-gray-900">The Hive</h2>
+                      <p className="text-xs text-gray-500 mt-1">Community Oriented Platform</p>
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -237,6 +267,34 @@ export function Header() {
                       <X className="w-5 h-5" />
                     </Button>
                   </div>
+                  
+                  {/* User Info */}
+                  {user && (
+                    <div className="mb-6 pb-6 border-b border-gray-200">
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                        onClick={() => {
+                          handleMenuClick('/my-profile');
+                        }}
+                      >
+                        {user.profile?.avatar && (
+                          <img 
+                            src={user.profile.avatar} 
+                            alt={user.username}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">{user.username}</p>
+                          {user.first_name || user.last_name ? (
+                            <p className="text-sm text-gray-600">
+                              {user.first_name} {user.last_name}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Button
                       variant="ghost"
@@ -244,7 +302,7 @@ export function Header() {
                       onClick={() => handleMenuClick('/')}
                     >
                       <HomeIcon className="w-5 h-5 mr-3" />
-                      Home Page
+                      Home
                     </Button>
                     <Button
                       variant="ghost"
@@ -257,18 +315,18 @@ export function Header() {
                     <Button
                       variant="ghost"
                       className="w-full justify-start h-12"
-                      onClick={() => handleMenuClick('/my-profile')}
-                    >
-                      <User className="w-5 h-5 mr-3" />
-                      My Profile
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start h-12"
                       onClick={() => handleMenuClick('/forum')}
                     >
                       <MessageSquare className="w-5 h-5 mr-3" />
                       Community Forum
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start h-12"
+                      onClick={() => handleMenuClick('/approval')}
+                    >
+                      <CheckCircle className="w-5 h-5 mr-3" />
+                      My Approvals
                     </Button>
                     {isAdmin && (
                       <Button
@@ -359,30 +417,57 @@ export function Header() {
                                     </div>
                                     <Badge
                                       variant={
-                                        proposal.status === 'accepted'
+                                        proposal.status === 'completed'
+                                          ? 'default'
+                                          : proposal.status === 'accepted'
                                           ? 'default'
                                           : proposal.status === 'declined'
                                           ? 'destructive'
+                                          : proposal.status === 'cancelled'
+                                          ? 'destructive'
                                           : 'secondary'
                                       }
+                                      className={
+                                        proposal.status === 'completed'
+                                          ? 'bg-blue-600 text-white'
+                                          : proposal.status === 'accepted'
+                                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                                          : proposal.status === 'cancelled'
+                                          ? 'bg-red-600 text-white'
+                                          : ''
+                                      }
                                     >
-                                      {proposal.status === 'accepted'
+                                      {proposal.status === 'completed'
+                                        ? 'Completed'
+                                        : proposal.status === 'accepted'
                                         ? 'Accepted'
                                         : proposal.status === 'declined'
                                         ? 'Declined'
+                                        : proposal.status === 'cancelled'
+                                        ? 'Cancelled'
                                         : 'Waiting'}
                                     </Badge>
                                   </div>
-                                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                                    <span className="flex items-center gap-1">
-                                      <MapPin className="w-3 h-3" />
-                                      {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
-                                    </span>
-                                    {proposal.date && (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-4 text-xs text-gray-500">
                                       <span className="flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        {new Date(proposal.date).toLocaleDateString()}
+                                        <MapPin className="w-3 h-3" />
+                                        {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
                                       </span>
+                                      {proposal.proposed_date && (
+                                        <span className="flex items-center gap-1">
+                                          <Calendar className="w-3 h-3" />
+                                          {new Date(proposal.proposed_date).toLocaleDateString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {proposal.notes && proposal.notes.includes('[Response from') && (
+                                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                                        <p className="font-medium text-blue-900 mb-1">Response:</p>
+                                        <p className="text-blue-800">
+                                          {proposal.notes.split('\n').find(line => line.includes('[Response from'))?.replace(/\[Response from .+?\]:\s*/, '') || ''}
+                                        </p>
+                                      </div>
                                     )}
                                   </div>
                                 </CardContent>
@@ -423,22 +508,39 @@ export function Header() {
                                         {proposal.post_title}
                                       </h4>
                                       <span className="text-xs text-gray-500">
-                                        from {proposal.sender_username}
+                                        from {proposal.requester_username}
                                       </span>
                                     </div>
                                     <Badge
                                       variant={
-                                        proposal.status === 'accepted'
+                                        proposal.status === 'completed'
+                                          ? 'default'
+                                          : proposal.status === 'accepted'
                                           ? 'default'
                                           : proposal.status === 'declined'
                                           ? 'destructive'
+                                          : proposal.status === 'cancelled'
+                                          ? 'destructive'
                                           : 'secondary'
                                       }
+                                      className={
+                                        proposal.status === 'completed'
+                                          ? 'bg-blue-600 text-white'
+                                          : proposal.status === 'accepted'
+                                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                                          : proposal.status === 'cancelled'
+                                          ? 'bg-red-600 text-white'
+                                          : ''
+                                      }
                                     >
-                                      {proposal.status === 'accepted'
+                                      {proposal.status === 'completed'
+                                        ? 'Completed'
+                                        : proposal.status === 'accepted'
                                         ? 'Accepted'
                                         : proposal.status === 'declined'
                                         ? 'Declined'
+                                        : proposal.status === 'cancelled'
+                                        ? 'Cancelled'
                                         : 'Waiting'}
                                     </Badge>
                                   </div>
@@ -447,10 +549,10 @@ export function Header() {
                                       <MapPin className="w-3 h-3" />
                                       {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
                                     </span>
-                                    {proposal.date && (
+                                    {proposal.proposed_date && (
                                       <span className="flex items-center gap-1">
                                         <Calendar className="w-3 h-3" />
-                                        {new Date(proposal.date).toLocaleDateString()}
+                                        {new Date(proposal.proposed_date).toLocaleDateString()}
                                       </span>
                                     )}
                                   </div>

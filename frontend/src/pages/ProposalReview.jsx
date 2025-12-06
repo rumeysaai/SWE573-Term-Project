@@ -13,15 +13,21 @@ import {
   User,
   MessageCircle,
   Loader2,
-  Send,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
-import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 
 export default function ProposalReview() {
   const { proposalId } = useParams();
@@ -32,22 +38,10 @@ export default function ProposalReview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [processing, setProcessing] = useState(false);
-  const [showCounterOffer, setShowCounterOffer] = useState(false);
-  const [hasPostOwnerProposal, setHasPostOwnerProposal] = useState(false);
-  const [hasPendingProposal, setHasPendingProposal] = useState(false);
-  const [counterOfferData, setCounterOfferData] = useState({
-    hours: 2,
-    date: '',
-    time: '',
-    location: '',
-    notes: '',
-  });
-  
-  // Location autocomplete states
-  const [locationInput, setLocationInput] = useState('');
-  const [locationSuggestions, setLocationSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [locationLoading, setLocationLoading] = useState(false);
+  const [responseMessage, setResponseMessage] = useState('');
+  const [showResponseForm, setShowResponseForm] = useState(false);
+  const [responseAction, setResponseAction] = useState(null); // 'accept' or 'decline'
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   useEffect(() => {
     const fetchProposal = async () => {
@@ -66,36 +60,6 @@ export default function ProposalReview() {
         // Fetch post details
         const postResponse = await api.get(`/posts/${proposalData.post_id}/`);
         setPost(postResponse.data);
-
-        // Check if post owner has already sent a proposal for this post
-        // and if there are any pending proposals for this post
-        if (user && postResponse.data.postedBy === user.username) {
-          try {
-            const proposalsResponse = await api.get('/proposals/', {
-              params: { post: proposalData.post_id }
-            });
-            const proposalsData = Array.isArray(proposalsResponse.data)
-              ? proposalsResponse.data
-              : (proposalsResponse.data?.results || []);
-            
-            // Check if post owner has sent any proposal for this post
-            const postOwnerProposal = proposalsData.find(
-              p => p.sender_id === user.id
-            );
-            setHasPostOwnerProposal(!!postOwnerProposal);
-            
-            // Check if there are any pending proposals (waiting status) for this post
-            const pendingProposals = proposalsData.filter(
-              p => p.status === 'waiting'
-            );
-            setHasPendingProposal(pendingProposals.length > 0);
-          } catch (err) {
-            console.error('Error checking post owner proposals:', err);
-            // If check fails, assume no proposal exists
-            setHasPostOwnerProposal(false);
-            setHasPendingProposal(false);
-          }
-        }
       } catch (err) {
         console.error('Error fetching proposal:', err);
         setError('Failed to load proposal');
@@ -108,19 +72,64 @@ export default function ProposalReview() {
     fetchProposal();
   }, [proposalId, user]);
 
+  const handleAcceptClick = () => {
+    setResponseAction('accept');
+    setShowResponseForm(true);
+  };
+
+  const handleDeclineClick = () => {
+    setResponseAction('decline');
+    setShowResponseForm(true);
+  };
+
   const handleAccept = async () => {
     if (!proposal) return;
 
     try {
       setProcessing(true);
-      await api.patch(`/proposals/${proposalId}/`, { status: 'accepted' });
-      toast.success('Proposal accepted successfully!');
+      const updateData = { status: 'accepted' };
+      if (responseMessage.trim()) {
+        // Append response message to notes
+        const currentNotes = proposal.notes || '';
+        const responseNote = `\n\n[Response from ${user?.username}]: ${responseMessage.trim()}`;
+        updateData.notes = currentNotes + responseNote;
+      }
+      await api.patch(`/proposals/${proposalId}/`, updateData);
+      
+      // Get updated user profile to show balance change
+      const userResponse = await api.get('/session/');
+      const updatedBalance = userResponse.data?.profile?.time_balance || 0;
+      
+      // Determine who paid based on post type
+      const isOffer = proposal.post?.post_type === 'offer' || proposal.post_type === 'offer';
+      const isCurrentUser = isOffer 
+        ? user?.id === proposal.requester_id 
+        : user?.id === proposal.provider_id;
+      
+      if (isCurrentUser) {
+        toast.success(
+          `Proposal accepted successfully! ${proposal.timebank_hour} hours deducted from your balance. New balance: ${updatedBalance} hours.`
+        );
+      } else {
+        toast.success('Proposal accepted successfully!');
+      }
+      
       // Refresh proposal data
       const response = await api.get(`/proposals/${proposalId}/`);
       setProposal(response.data);
+      
+      // Refresh user data
+      if (user) {
+        window.dispatchEvent(new CustomEvent('userUpdated'));
+      }
+      
+      setShowResponseForm(false);
+      setResponseMessage('');
+      setResponseAction(null);
     } catch (err) {
       console.error('Error accepting proposal:', err);
-      toast.error(err.response?.data?.detail || 'Failed to accept proposal');
+      const errorMessage = err.response?.data?.detail || err.response?.data?.error || 'Failed to accept proposal';
+      toast.error(errorMessage);
     } finally {
       setProcessing(false);
     }
@@ -131,17 +140,97 @@ export default function ProposalReview() {
 
     try {
       setProcessing(true);
-      await api.patch(`/proposals/${proposalId}/`, { status: 'declined' });
+      const updateData = { status: 'declined' };
+      if (responseMessage.trim()) {
+        // Append response message to notes
+        const currentNotes = proposal.notes || '';
+        const responseNote = `\n\n[Response from ${user?.username}]: ${responseMessage.trim()}`;
+        updateData.notes = currentNotes + responseNote;
+      }
+      await api.patch(`/proposals/${proposalId}/`, updateData);
       toast.success('Proposal declined');
       // Refresh proposal data
       const response = await api.get(`/proposals/${proposalId}/`);
       setProposal(response.data);
+      setShowResponseForm(false);
+      setResponseMessage('');
+      setResponseAction(null);
     } catch (err) {
       console.error('Error declining proposal:', err);
       toast.error(err.response?.data?.detail || 'Failed to decline proposal');
     } finally {
       setProcessing(false);
     }
+  };
+
+  const handleCancelResponse = () => {
+    setShowResponseForm(false);
+    setResponseMessage('');
+    setResponseAction(null);
+  };
+
+  const handleCancelNegotiationClick = () => {
+    setShowCancelConfirm(true);
+  };
+
+  const handleCancelNegotiationConfirm = async () => {
+    if (!proposal) return;
+
+    try {
+      setProcessing(true);
+      setShowCancelConfirm(false);
+      const updateData = { status: 'cancelled' };
+      await api.patch(`/proposals/${proposalId}/`, updateData);
+      
+      // Get updated user profile to show balance refund (if was accepted)
+      const userResponse = await api.get('/session/');
+      const updatedBalance = userResponse.data?.profile?.time_balance || 0;
+      
+      // Check if proposal was accepted before (to show refund message)
+      const wasAccepted = proposal.status === 'accepted';
+      
+      if (wasAccepted) {
+        // Determine who got refunded based on post type
+        const isOffer = proposal.post?.post_type === 'offer' || proposal.post_type === 'offer';
+        const isCurrentUser = isOffer 
+          ? user?.id === proposal.requester_id 
+          : user?.id === proposal.provider_id;
+        
+        if (isCurrentUser) {
+          toast.success(
+            `Negotiation cancelled successfully! ${proposal.timebank_hour} hours refunded to your balance. New balance: ${updatedBalance} hours.`
+          );
+        } else {
+          toast.success('Negotiation cancelled successfully');
+        }
+        
+        // Refresh user data
+        if (user) {
+          window.dispatchEvent(new CustomEvent('userUpdated'));
+        }
+      } else {
+        toast.success('Negotiation cancelled successfully');
+      }
+      
+      // Store who cancelled this proposal in sessionStorage
+      sessionStorage.setItem(`proposal_${proposalId}_cancelled_by`, user?.id?.toString() || '');
+      
+      // Refresh proposal data
+      const response = await api.get(`/proposals/${proposalId}/`);
+      setProposal(response.data);
+      
+      // Notify Header to refresh proposals
+      window.dispatchEvent(new CustomEvent('proposalUpdated'));
+    } catch (err) {
+      console.error('Error cancelling negotiation:', err);
+      toast.error(err.response?.data?.detail || 'Failed to cancel negotiation');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCancelConfirmClose = () => {
+    setShowCancelConfirm(false);
   };
 
   if (loading) {
@@ -184,95 +273,66 @@ export default function ProposalReview() {
     );
   }
 
-  // Location autocomplete functions
-  const searchLocation = async (query) => {
-    if (query.length < 3) {
-      setLocationSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-
-    setLocationLoading(true);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`
-      );
-      const data = await response.json();
-      setLocationSuggestions(data);
-      setShowSuggestions(true);
-    } catch (err) {
-      console.error("Location search error:", err);
-      setLocationSuggestions([]);
-    } finally {
-      setLocationLoading(false);
-    }
-  };
-
-  const handleLocationInputChange = (e) => {
-    const value = e.target.value;
-    setLocationInput(value);
-    setCounterOfferData(prev => ({ ...prev, location: value }));
-    
-    if (locationInput !== value) {
-      const timeoutId = setTimeout(() => {
-        searchLocation(value);
-      }, 300);
-      return () => clearTimeout(timeoutId);
-    }
-  };
-
-  const handleLocationSelect = (suggestion) => {
-    setLocationInput(suggestion.display_name);
-    setCounterOfferData(prev => ({
-      ...prev,
-      location: suggestion.display_name,
-    }));
-    setShowSuggestions(false);
-    setLocationSuggestions([]);
-  };
-
-  const handleCounterOffer = async () => {
-    if (!counterOfferData.date) {
-      toast.error('Please select a date');
-      return;
-    }
-
-    try {
-      // Combine time, location, and notes into notes field
-      let notesText = counterOfferData.notes || '';
-      if (counterOfferData.time) {
-        notesText = `Time: ${counterOfferData.time}\n${notesText}`.trim();
-      }
-      if (counterOfferData.location) {
-        notesText = `Location: ${counterOfferData.location}\n${notesText}`.trim();
-      }
-
-      const proposalPayload = {
-        post: proposal.post_id,
-        notes: notesText,
-        timebank_hour: counterOfferData.hours.toString(),
-        status: 'waiting',
-        date: counterOfferData.date,
-      };
-
-      await api.post('/proposals/', proposalPayload);
-      toast.success('Counter offer sent successfully!');
-      setShowCounterOffer(false);
-      setCounterOfferData({ hours: 2, date: '', time: '', location: '', notes: '' });
-      setLocationInput('');
-      setHasPostOwnerProposal(true); // Mark that post owner has sent a proposal
-      
-      // Navigate to negotiation page
-      navigate(`/negotiate/${proposal.post_id}`);
-    } catch (err) {
-      console.error('Error sending counter offer:', err);
-      toast.error(err.response?.data?.detail || 'Failed to send counter offer');
-    }
-  };
-
   const locationFromNotes = proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim();
   const timeFromNotes = proposal.notes?.split('\n').find(line => line.startsWith('Time:'))?.replace('Time:', '').trim();
-  const notesText = proposal.notes?.split('\n').filter(line => !line.startsWith('Location:') && !line.startsWith('Time:')).join('\n').trim();
+  const providerResponseMessage = proposal.notes?.split('\n').find(line => line.includes('[Response from'))?.replace(/\[Response from .+?\]:\s*/, '') || null;
+  const notesText = proposal.notes?.split('\n').filter(line => !line.startsWith('Location:') && !line.startsWith('Time:') && !line.includes('[Response from')).join('\n').trim();
+
+  // Calculate event datetime and check if cancellation is allowed (12 hours before event)
+  const canCancelNegotiation = () => {
+    if (!proposal || !proposal.proposed_date) {
+      console.log('canCancelNegotiation: No proposal or proposed_date');
+      return false;
+    }
+    
+    try {
+      // Create event date from proposal date (assuming ISO format or YYYY-MM-DD)
+      const dateStr = proposal.proposed_date;
+      const eventDate = new Date(dateStr);
+      
+      // Check if date is valid
+      if (isNaN(eventDate.getTime())) {
+        console.log('canCancelNegotiation: Invalid date', dateStr);
+        return false;
+      }
+      
+      // If time is provided, add it to the date
+      const timeValue = proposal.proposed_time || timeFromNotes;
+      if (timeValue) {
+        // Handle time formats: "HH:MM" or "HH:MM:SS"
+        const timeParts = timeValue.split(':');
+        const hours = parseInt(timeParts[0], 10) || 0;
+        const minutes = parseInt(timeParts[1], 10) || 0;
+        eventDate.setHours(hours, minutes, 0, 0);
+      } else {
+        // Default to end of day if no time specified
+        eventDate.setHours(23, 59, 59, 999);
+      }
+      
+      // Current time
+      const now = new Date();
+      
+      // Calculate difference in milliseconds
+      const diffMs = eventDate.getTime() - now.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+      
+      console.log('canCancelNegotiation:', {
+        proposed_date: proposal.proposed_date,
+        proposed_time: proposal.proposed_time,
+        timeFromNotes,
+        eventDate: eventDate.toISOString(),
+        now: now.toISOString(),
+        diffHours,
+        canCancel: diffHours > 12
+      });
+      
+      // Can cancel if more than 12 hours remain
+      return diffHours > 12;
+    } catch (err) {
+      console.error('Error calculating cancellation availability:', err);
+      return false;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -291,12 +351,104 @@ export default function ProposalReview() {
             <MessageCircle className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-primary text-slate-900 font-normal">Review Proposal</h2>
+            <h2 className="text-primary text-slate-900 font-normal">Negotiation</h2>
             <p className="text-muted-foreground text-sm text-slate-600">
               {post.title}
             </p>
           </div>
         </div>
+
+        {/* Cancelled Card - Show above Post Summary if cancelled */}
+        {proposal.status === 'cancelled' && (
+          <Card className="shadow-md border-primary/20">
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                  <XCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+                  <p className="text-lg font-semibold text-red-900 mb-2">
+                    Proposal Cancelled
+                  </p>
+                  <p className="text-sm text-red-700 mb-4">
+                    {(() => {
+                      // Check if current user cancelled this proposal
+                      const cancelledByUserId = sessionStorage.getItem(`proposal_${proposalId}_cancelled_by`);
+                      const isCurrentUserCancelled = cancelledByUserId && cancelledByUserId === user?.id?.toString();
+                      
+                      if (isCurrentUserCancelled) {
+                        return `You have cancelled this negotiation.`;
+                      }
+                      
+                      // Determine who cancelled: if current user is provider (post owner), then requester cancelled, and vice versa
+                      const isCurrentUserProvider = user?.id === proposal.provider_id;
+                      const isCurrentUserRequester = user?.id === proposal.requester_id;
+                      
+                      if (isCurrentUserProvider) {
+                        // Current user is post owner, so requester cancelled
+                        return `This proposal has been cancelled by ${proposal.requester_username} (Requester).`;
+                      } else if (isCurrentUserRequester) {
+                        // Current user is requester, so provider (post owner) cancelled
+                        return `This proposal has been cancelled by ${proposal.provider_username} (Post Owner).`;
+                      } else {
+                        // Fallback: show both options
+                        return `This proposal has been cancelled.`;
+                      }
+                    })()}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Upcoming Event - Show above Post Summary if accepted */}
+        {proposal.status === 'accepted' && (
+          <Card className="shadow-md border-primary/20">
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                  <Calendar className="w-12 h-12 text-blue-600 mx-auto mb-4" />
+                  <p className="text-lg font-semibold text-blue-900 mb-2">
+                    Upcoming Event With {proposal.requester_username}
+                  </p>
+                  <p className="text-sm text-blue-700 mb-4">
+                    This proposal has been accepted
+                  </p>
+                  {proposal.proposed_date && (
+                    <p className="text-xs text-blue-600 mt-3">
+                      Event Date: {new Date(proposal.proposed_date).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                      {(proposal.proposed_time || timeFromNotes) && ` at ${proposal.proposed_time || timeFromNotes}`}
+                    </p>
+                  )}
+                  <div className="mt-6 flex gap-3 justify-center">
+                    <Button
+                      onClick={() => navigate(`/approval/${proposalId}`)}
+                      variant="outline"
+                      className="bg-green-600 hover:bg-green-700 text-white border-green-700"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Go to Approval
+                    </Button>
+                    {canCancelNegotiation() && (
+                      <Button
+                        onClick={handleCancelNegotiationClick}
+                        disabled={processing}
+                        variant="destructive"
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Cancel the Event
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Post Summary */}
         <Card className="shadow-md border-primary/20">
@@ -328,17 +480,30 @@ export default function ProposalReview() {
               <CardTitle className="text-primary text-slate-900">Proposal Details</CardTitle>
               <Badge
                 variant={
-                  proposal.status === 'accepted'
+                  proposal.status === 'completed'
                     ? 'default'
-                    : proposal.status === 'declined'
+                    : proposal.status === 'accepted'
+                    ? 'default'
+                    : proposal.status === 'declined' || proposal.status === 'cancelled'
                     ? 'destructive'
                     : 'secondary'
                 }
+                className={
+                  proposal.status === 'completed'
+                    ? 'bg-blue-600 text-white'
+                    : proposal.status === 'accepted'
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : ''
+                }
               >
-                {proposal.status === 'accepted'
+                {proposal.status === 'completed'
+                  ? 'Completed'
+                  : proposal.status === 'accepted'
                   ? 'Accepted'
                   : proposal.status === 'declined'
                   ? 'Declined'
+                  : proposal.status === 'cancelled'
+                  ? 'Cancelled'
                   : 'Waiting'}
               </Badge>
             </div>
@@ -350,7 +515,7 @@ export default function ProposalReview() {
                 <User className="w-5 h-5 text-primary text-slate-900" />
               </div>
               <div>
-                <p className="font-medium">{proposal.sender_username}</p>
+                <p className="font-medium">{proposal.requester_username}</p>
                 <p className="text-xs text-muted-foreground text-slate-600">
                   Proposal sent on {new Date(proposal.created_at).toLocaleDateString('en-US', { 
                     year: 'numeric', 
@@ -373,38 +538,40 @@ export default function ProposalReview() {
                 </div>
               </div>
 
-              {proposal.date && (
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-5 h-5 text-primary text-slate-900" />
-                  <div>
-                    <p className="text-sm text-muted-foreground text-slate-600">Proposed Date</p>
-                    <p className="font-medium">
-                      {new Date(proposal.date).toLocaleDateString('en-US', { 
+              <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-primary text-slate-900" />
+                <div>
+                  <p className="text-sm text-muted-foreground text-slate-600">Proposed Date</p>
+                  <p className="font-medium">
+                    {proposal.proposed_date ? (
+                      new Date(proposal.proposed_date).toLocaleDateString('en-US', { 
                         year: 'numeric', 
                         month: 'long', 
                         day: 'numeric' 
-                      })}
-                    </p>
-                  </div>
+                      })
+                    ) : (
+                      <span className="text-muted-foreground">Not specified</span>
+                    )}
+                  </p>
                 </div>
-              )}
+              </div>
 
-              {timeFromNotes && (
+              {(proposal.proposed_time || timeFromNotes) && (
                 <div className="flex items-center gap-3">
                   <Clock className="w-5 h-5 text-primary text-slate-900" />
                   <div>
                     <p className="text-sm text-muted-foreground text-slate-600">Proposed Time</p>
-                    <p className="font-medium">{timeFromNotes}</p>
+                    <p className="font-medium">{proposal.proposed_time || timeFromNotes}</p>
                   </div>
                 </div>
               )}
 
-              {locationFromNotes && (
+              {(proposal.proposed_location || locationFromNotes) && (
                 <div className="flex items-center gap-3">
                   <MapPin className="w-5 h-5 text-primary text-slate-900" />
                   <div>
                     <p className="text-sm text-muted-foreground text-slate-600">Location</p>
-                    <p className="font-medium">{locationFromNotes}</p>
+                    <p className="font-medium">{proposal.proposed_location || locationFromNotes}</p>
                   </div>
                 </div>
               )}
@@ -415,38 +582,75 @@ export default function ProposalReview() {
                   <p className="text-sm whitespace-pre-line">{notesText}</p>
                 </div>
               )}
+
+              {providerResponseMessage && (
+                <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                  <p className="text-sm font-medium text-blue-900 mb-1">Your Response:</p>
+                  <p className="text-sm text-blue-800 whitespace-pre-line">{providerResponseMessage}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Action Buttons */}
-        {proposal.status === 'waiting' && (
+        {proposal.status === 'waiting' && !showResponseForm && (
           <Card className="shadow-md border-primary/20">
             <CardContent className="pt-6">
               <div className="flex gap-3">
                 <Button
-                  onClick={handleAccept}
+                  onClick={handleAcceptClick}
                   disabled={processing}
                   className="flex-1 bg-green-600 hover:bg-green-700"
                 >
-                  {processing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Accept Proposal
-                    </>
-                  )}
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Accept Proposal
                 </Button>
                 <Button
-                  onClick={handleDecline}
+                  onClick={handleDeclineClick}
                   disabled={processing}
                   variant="destructive"
                   className="flex-1"
                 >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Decline Proposal
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Response Form with Message */}
+        {proposal.status === 'waiting' && showResponseForm && (
+          <Card className="shadow-md border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-primary text-slate-900">
+                {responseAction === 'accept' ? 'Accept Proposal' : 'Decline Proposal'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="response-message" className="text-primary text-slate-900">
+                  Message (Optional)
+                </Label>
+                <Textarea
+                  id="response-message"
+                  rows={4}
+                  placeholder={`Add a message to ${responseAction === 'accept' ? 'accept' : 'decline'} this proposal...`}
+                  value={responseMessage}
+                  onChange={(e) => setResponseMessage(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground text-slate-500">
+                  This message will be added to the proposal notes.
+                </p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  onClick={responseAction === 'accept' ? handleAccept : handleDecline}
+                  disabled={processing}
+                  className={`flex-1 ${responseAction === 'accept' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                  variant={responseAction === 'decline' ? 'destructive' : 'default'}
+                >
                   {processing ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -454,175 +658,69 @@ export default function ProposalReview() {
                     </>
                   ) : (
                     <>
-                      <XCircle className="w-4 h-4 mr-2" />
-                      Decline Proposal
+                      {responseAction === 'accept' ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Confirm Accept
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-4 h-4 mr-2" />
+                          Confirm Decline
+                        </>
+                      )}
                     </>
                   )}
+                </Button>
+                <Button
+                  onClick={handleCancelResponse}
+                  disabled={processing}
+                  variant="outline"
+                >
+                  Cancel
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {proposal.status === 'declined' && !hasPostOwnerProposal && !hasPendingProposal && (
-          <Card className="shadow-md border-primary/20">
-            <CardHeader>
-              <CardTitle className="text-primary text-slate-900">Make Counter Offer</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              {!showCounterOffer ? (
-                <div className="text-center py-4">
-                  <p className="text-muted-foreground text-slate-600 mb-4">
-                    This proposal has been declined. Would you like to make a counter offer?
-                  </p>
-                  <Button onClick={() => setShowCounterOffer(true)}>
-                    Make Counter Offer
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="counter-hours" className="text-primary text-slate-900">Duration (Hours)</Label>
-                      <Input
-                        id="counter-hours"
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        value={counterOfferData.hours}
-                        onChange={(e) => setCounterOfferData({ ...counterOfferData, hours: parseFloat(e.target.value) })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="counter-time" className="text-primary text-slate-900">Time</Label>
-                      <Input
-                        id="counter-time"
-                        type="time"
-                        value={counterOfferData.time}
-                        onChange={(e) => setCounterOfferData({ ...counterOfferData, time: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="counter-date" className="text-primary text-slate-900">Date</Label>
-                    <Input
-                      id="counter-date"
-                      type="date"
-                      value={counterOfferData.date}
-                      onChange={(e) => setCounterOfferData({ ...counterOfferData, date: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="counter-location" className="text-primary text-slate-900">Location</Label>
-                    <div className="relative">
-                      <Input
-                        id="counter-location"
-                        type="text"
-                        placeholder="Type location (e.g., Kadıköy, Beşiktaş...)"
-                        value={locationInput}
-                        onChange={handleLocationInputChange}
-                        onFocus={() => {
-                          if (locationSuggestions.length > 0) {
-                            setShowSuggestions(true);
-                          }
-                        }}
-                        onBlur={() => {
-                          setTimeout(() => setShowSuggestions(false), 200);
-                        }}
-                      />
-                      {locationLoading && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                        </div>
-                      )}
-                      {showSuggestions && locationSuggestions.length > 0 && (
-                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
-                          {locationSuggestions.map((suggestion, index) => (
-                            <div
-                              key={index}
-                              onClick={() => handleLocationSelect(suggestion)}
-                              className="px-4 py-2 hover:bg-primary/5 cursor-pointer border-b border-gray-100 last:border-b-0"
-                            >
-                              <div className="font-medium text-sm text-gray-900">
-                                {suggestion.display_name.split(',')[0]}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-0.5">
-                                {suggestion.display_name}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="counter-notes" className="text-primary text-slate-900">Additional Notes</Label>
-                    <Textarea
-                      id="counter-notes"
-                      rows={4}
-                      placeholder="Additional details about your counter offer..."
-                      value={counterOfferData.notes}
-                      onChange={(e) => setCounterOfferData({ ...counterOfferData, notes: e.target.value })}
-                    />
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button 
-                      className="flex-1"
-                      onClick={handleCounterOffer}
-                    >
-                      <Send className="w-4 h-4 mr-2" />
-                      Send Counter Offer
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        setShowCounterOffer(false);
-                        setCounterOfferData({ hours: 2, date: '', time: '', location: '', notes: '' });
-                        setLocationInput('');
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
-        {proposal.status === 'declined' && (hasPostOwnerProposal || hasPendingProposal) && (
-          <Card className="shadow-md border-primary/20">
-            <CardContent className="pt-6">
-              <div className="text-center py-4">
-                <p className="text-muted-foreground text-slate-600">
-                  {hasPostOwnerProposal 
-                    ? 'This proposal has been declined. You have already sent a counter offer.'
-                    : 'This proposal has been declined. There is already a pending proposal for this post. Please wait for a response.'}
-                </p>
-                {hasPostOwnerProposal && (
-                  <Button 
-                    onClick={() => navigate(`/negotiate/${proposal.post_id}`)}
-                    className="mt-4"
-                  >
-                    View Negotiation
-                  </Button>
+
+
+        {/* Cancel Negotiation Confirmation Dialog */}
+        <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cancel Negotiation</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to cancel this negotiation? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleCancelConfirmClose}
+                disabled={processing}
+              >
+                Back
+              </Button>
+              <Button
+                onClick={handleCancelNegotiationConfirm}
+                disabled={processing}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {processing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Confirm'
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {proposal.status === 'accepted' && (
-          <Card className="shadow-md border-primary/20">
-            <CardContent className="pt-6">
-              <div className="text-center py-4">
-                <p className="text-muted-foreground text-slate-600">
-                  This proposal has been accepted
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

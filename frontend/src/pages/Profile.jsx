@@ -12,10 +12,8 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "../App";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Clock,
   User,
   Leaf,
-  Sprout,
   MapPin,
   Shield,
   Award,
@@ -31,6 +29,7 @@ export default function Profile() {
   const navigate = useNavigate();
   const [profileData, setProfileData] = useState(null);
   const [userPosts, setUserPosts] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -46,7 +45,7 @@ export default function Profile() {
         setLoading(true);
         const [profileResponse, postsResponse] = await Promise.all([
           api.get(`/users/${username}/`),
-          api.get('/posts/', { params: { posted_by__username: username } })
+          api.get('/posts/', { params: { posted_by__username: username } }),
         ]);
         
         setProfileData(profileResponse.data);
@@ -76,6 +75,75 @@ export default function Profile() {
         }));
         
         setUserPosts(formattedPosts);
+
+        // Get user ID from profile
+        const userId = profileResponse.data.id;
+
+        // Fetch all proposals to find completed ones for this user
+        // We need to get proposals where user is either requester or provider
+        const [sentProposalsResponse, receivedProposalsResponse] = await Promise.all([
+          api.get(`/proposals/?sent=true&username=${username}`),
+          api.get(`/proposals/?received=true&username=${username}`),
+        ]);
+
+        // Combine all proposals and filter by the profile user's ID
+        const allProposals = [
+          ...(sentProposalsResponse.data || []),
+          ...(receivedProposalsResponse.data || []),
+        ];
+
+        // Filter proposals that belong to the profile user (not the authenticated user)
+        // and are completed
+        const userProposals = allProposals.filter(proposal => {
+          // Check if this proposal belongs to the profile user
+          const belongsToUser = 
+            proposal.requester_id === userId || 
+            proposal.provider_id === userId;
+          
+          return belongsToUser;
+        });
+
+        // Filter completed proposals where:
+        // - For 'offer' posts: user is provider (post owner)
+        // - For 'need' posts: user is requester
+        const completedProposals = userProposals.filter(proposal => {
+          if (proposal.status !== 'completed') return false;
+          
+          const postType = proposal.post_type || proposal.post?.post_type;
+          const isProvider = proposal.provider_id === userId;
+          const isRequester = proposal.requester_id === userId;
+
+          if (postType === 'offer') {
+            return isProvider; // Offer: provider completed
+          } else if (postType === 'need') {
+            return isRequester; // Need: requester completed
+          }
+          return false;
+        });
+
+
+        // Fetch post details for completed proposals
+        const completedJobsWithPosts = await Promise.all(
+          completedProposals.map(async (proposal) => {
+            try {
+              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
+              return {
+                proposalId: proposal.id,
+                post: postResponse.data,
+                timebank_hour: proposal.timebank_hour,
+                proposed_date: proposal.proposed_date,
+                updated_at: proposal.updated_at || proposal.updatedAt,
+              };
+            } catch (err) {
+              console.error('Error fetching post for proposal:', err);
+              return null;
+            }
+          })
+        );
+
+        // Filter out null values
+        const validJobs = completedJobsWithPosts.filter(job => job !== null);
+        setCompletedJobs(validJobs);
       } catch (err) {
         console.error('Error fetching profile:', err);
         setError('Failed to load profile');
@@ -235,8 +303,8 @@ export default function Profile() {
                 Needs
               </SimpleTabsTrigger>
               <SimpleTabsTrigger value="history">
-                <Clock className="w-4 h-4 mr-2" />
-                Transaction History
+                <Award className="w-4 h-4 mr-2" />
+                The Hive History
               </SimpleTabsTrigger>
             </SimpleTabsList>
 
@@ -357,10 +425,78 @@ export default function Profile() {
             </SimpleTabsContent>
 
             <SimpleTabsContent value="history" className="space-y-3 mt-6">
-              <div className="text-center py-8 text-muted-foreground">
-                <Clock className="w-12 h-12 mx-auto mb-4 text-primary/50" />
-                <p>No transaction history available yet.</p>
-              </div>
+              {completedJobs.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Award className="w-12 h-12 mx-auto mb-4 text-primary/50" />
+                  <p>No service history available yet.</p>
+                </div>
+              ) : (
+                completedJobs.map((job) => {
+                  const post = job.post;
+                  return (
+                    <div
+                      key={job.proposalId}
+                      className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/post-details/${post.id}`)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="text-primary font-medium">{post.title}</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {job.updated_at 
+                              ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
+                              : job.proposed_date
+                              ? formatDistanceToNow(new Date(job.proposed_date), { addSuffix: true })
+                              : 'Recently'}
+                          </p>
+                          {post.description && (
+                            <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                              {post.description}
+                            </p>
+                          )}
+                          <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Award className="w-3 h-3" />
+                              Completed
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Timer className="w-3 h-3" />
+                              {job.timebank_hour} hours
+                            </span>
+                          </div>
+                        </div>
+                        {post.duration && (
+                          <Badge
+                            variant="outline"
+                            className="border-primary text-primary bg-primary/10"
+                          >
+                            {post.duration}
+                          </Badge>
+                        )}
+                      </div>
+                      {post.tags && post.tags.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          {post.tags.map((tag, idx) => (
+                            <Badge
+                              key={idx}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {post.location && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="w-3 h-3" />
+                          <span>{post.location}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </SimpleTabsContent>
           </SimpleTabs>
         </CardContent>

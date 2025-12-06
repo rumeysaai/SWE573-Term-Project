@@ -1,10 +1,10 @@
 from django.contrib import admin
-from .models import Chat, Profile, Request, Tag, Post, Comment, Proposal
+from .models import Chat, Profile, Tag, Post, Comment, Proposal, Job
 
 admin.site.register(Profile)
 admin.site.register(Tag)
 admin.site.register(Post)
-admin.site.register(Request)
 admin.site.register(Chat)
 admin.site.register(Comment)
 admin.site.register(Proposal)
+admin.site.register(Job)

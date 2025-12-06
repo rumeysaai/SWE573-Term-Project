@@ -271,7 +271,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """Filter proposals by sender (sent proposals), post owner (received proposals), or post ID"""
+        """Filter proposals by requester (sent proposals), provider (received proposals), or post ID"""
         queryset = Proposal.objects.all()
         
         # Filter by post ID if provided
@@ -279,18 +279,42 @@ class ProposalViewSet(viewsets.ModelViewSet):
         if post_id is not None:
             queryset = queryset.filter(post_id=post_id)
         
-        # Filter by sent proposals (proposals sent by current user)
+        # Filter by username if provided (for viewing other users' proposals)
+        username = self.request.query_params.get('username', None)
+        target_user = None
+        if username:
+            try:
+                target_user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                pass
+        
+        # Filter by sent proposals (proposals sent by user as requester)
         sent = self.request.query_params.get('sent', None)
         if sent == 'true':
-            queryset = queryset.filter(sender=self.request.user)
+            user_to_filter = target_user if target_user else self.request.user
+            queryset = queryset.filter(requester=user_to_filter)
         
-        # Filter by received proposals (proposals for posts owned by current user)
+        # Filter by received proposals (proposals for posts owned by user as provider)
         received = self.request.query_params.get('received', None)
         if received == 'true':
-            queryset = queryset.filter(post__posted_by=self.request.user)
+            user_to_filter = target_user if target_user else self.request.user
+            queryset = queryset.filter(provider=user_to_filter)
         
         return queryset.order_by('-created_at')
 
     def perform_create(self, serializer):
-        """Set the sender to the current authenticated user"""
-        serializer.save(sender=self.request.user)
+        """Set the requester to the current authenticated user and provider to the post owner"""
+        post = serializer.validated_data['post']
+        serializer.save(requester=self.request.user, provider=post.posted_by)
+    
+    def update(self, request, *args, **kwargs):
+        """Handle update with proper error handling for balance validation"""
+        try:
+            return super().update(request, *args, **kwargs)
+        except ValidationError as e:
+            from rest_framework.response import Response
+            from rest_framework import status
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )

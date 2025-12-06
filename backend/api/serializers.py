@@ -197,10 +197,72 @@ class CommentSerializer(serializers.ModelSerializer):
 class ProposalSerializer(serializers.ModelSerializer):
     post_id = serializers.IntegerField(source='post.id', read_only=True)
     post_title = serializers.CharField(source='post.title', read_only=True)
-    sender_id = serializers.IntegerField(source='sender.id', read_only=True)
-    sender_username = serializers.CharField(source='sender.username', read_only=True)
+    post_type = serializers.CharField(source='post.post_type', read_only=True)
+    requester_id = serializers.IntegerField(source='requester.id', read_only=True)
+    requester_username = serializers.CharField(source='requester.username', read_only=True)
+    provider_id = serializers.IntegerField(source='provider.id', read_only=True)
+    provider_username = serializers.CharField(source='provider.username', read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+
+    def to_representation(self, instance):
+        """Override to return 'completed' if associated Job is completed, otherwise return proposal status"""
+        data = super().to_representation(instance)
+        # Check if there's a Job associated with this proposal
+        job = instance.jobs.first()  # Get the first (and typically only) job for this proposal
+        if job and job.status == 'completed':
+            data['status'] = 'completed'
+        else:
+            data['status'] = instance.status
+        return data
+
+    def validate(self, data):
+        """Validate approval order based on post type"""
+        instance = self.instance
+        if instance is None:
+            # Creating new proposal, no validation needed
+            return data
+        
+        # Get the post type
+        post_type = instance.post.post_type
+        
+        # Check if provider_approved or requester_approved is being updated
+        provider_approved = data.get('provider_approved', instance.provider_approved)
+        requester_approved = data.get('requester_approved', instance.requester_approved)
+        
+        # Only validate if status is 'accepted'
+        if instance.status != 'accepted':
+            return data
+        
+        # Check if trying to approve
+        if 'provider_approved' in data or 'requester_approved' in data:
+            # If post is 'offer': provider must approve first, then requester
+            if post_type == 'offer':
+                # Provider trying to approve - always allowed if not already approved
+                if 'provider_approved' in data and data['provider_approved'] and not instance.provider_approved:
+                    # Provider approval is valid
+                    pass
+                # Requester trying to approve - must wait for provider approval first
+                elif 'requester_approved' in data and data['requester_approved'] and not instance.requester_approved:
+                    if not instance.provider_approved:
+                        raise serializers.ValidationError({
+                            'requester_approved': 'Post owner (provider) must approve first for offer type posts.'
+                        })
+            
+            # If post is 'need': requester must approve first, then provider
+            elif post_type == 'need':
+                # Requester trying to approve - always allowed if not already approved
+                if 'requester_approved' in data and data['requester_approved'] and not instance.requester_approved:
+                    # Requester approval is valid
+                    pass
+                # Provider trying to approve - must wait for requester approval first
+                elif 'provider_approved' in data and data['provider_approved'] and not instance.provider_approved:
+                    if not instance.requester_approved:
+                        raise serializers.ValidationError({
+                            'provider_approved': 'Requester must approve first for need type posts.'
+                        })
+        
+        return data
 
     class Meta:
         model = Proposal
@@ -209,14 +271,22 @@ class ProposalSerializer(serializers.ModelSerializer):
             'post',
             'post_id',
             'post_title',
-            'sender',
-            'sender_id',
-            'sender_username',
+            'post_type',
+            'requester',
+            'requester_id',
+            'requester_username',
+            'provider',
+            'provider_id',
+            'provider_username',
             'notes',
             'timebank_hour',
             'status',
-            'date',
+            'proposed_date',
+            'proposed_time',
+            'proposed_location',
+            'provider_approved',
+            'requester_approved',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'sender', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'requester', 'provider', 'created_at', 'updated_at']

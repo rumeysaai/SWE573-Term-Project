@@ -10,6 +10,7 @@ import Post from './pages/Post';
 import PostDetails from './pages/PostDetails';
 import Proposal from './pages/Proposal';
 import ProposalReview from './pages/ProposalReview';
+import Approval from './pages/Approval';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Profile from './pages/Profile';
@@ -145,7 +146,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={authContextValue}>
-      <Toaster richColors position="top-right" />
+      <Toaster richColors position="top-right" closeButton />
       <Router>
         <div className="flex flex-col min-h-screen">
           <Header />
@@ -185,6 +186,10 @@ export default function App() {
               <Route
                 path="/proposal-review/:proposalId"
                 element={<ProtectedRoute><ProposalReview /></ProtectedRoute>}
+              />
+              <Route
+                path="/approval/:proposalId?"
+                element={<ProtectedRoute><Approval /></ProtectedRoute>}
               />
               <Route
                 path="/my-profile"
