@@ -9,15 +9,19 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 
 export default function MyProfile() {
-  const { setUser } = useAuth();
+  const { user, setUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [newInterest, setNewInterest] = useState('');
   const [allTags, setAllTags] = useState([]);
+  const [showBalanceHistory, setShowBalanceHistory] = useState(false);
+  const [balanceHistory, setBalanceHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   
   // Edit states for each card
   const [editingProfilePhoto, setEditingProfilePhoto] = useState(false);
@@ -231,6 +235,132 @@ export default function MyProfile() {
     return tag ? tag.name : '';
   };
 
+  const fetchBalanceHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      // Fetch all proposals where user is either requester or provider
+      const [sentResponse, receivedResponse] = await Promise.all([
+        api.get('/proposals/?sent=true'),
+        api.get('/proposals/?received=true'),
+      ]);
+
+      const allProposals = [
+        ...(sentResponse.data || []),
+        ...(receivedResponse.data || []),
+      ];
+
+      // Remove duplicates by ID
+      const uniqueProposals = Array.from(
+        new Map(allProposals.map(p => [p.id, p])).values()
+      );
+
+      // Build history from proposals
+      const history = [];
+      
+      uniqueProposals.forEach(proposal => {
+        const isRequester = proposal.requester_id === user?.id || proposal.requester_username === formData.username;
+        const isProvider = proposal.provider_id === user?.id || proposal.provider_username === formData.username;
+        const postType = proposal.post_type || proposal.post?.post_type;
+
+        // Accepted proposals: Balance deduction
+        if (proposal.status === 'accepted') {
+          let amount = 0;
+          let description = '';
+
+          if (postType === 'offer' && isRequester) {
+            // Offer: requester pays
+            amount = -parseFloat(proposal.timebank_hour);
+            description = `Accepted proposal for "${proposal.post_title || 'Post'}" (Offer)`;
+          } else if (postType === 'need' && isProvider) {
+            // Need: provider pays
+            amount = -parseFloat(proposal.timebank_hour);
+            description = `Accepted proposal for "${proposal.post_title || 'Post'}" (Need)`;
+          }
+
+          if (amount !== 0) {
+            history.push({
+              id: `accepted-${proposal.id}`,
+              type: 'deduction',
+              amount: Math.abs(amount),
+              description,
+              date: proposal.updated_at || proposal.created_at,
+              proposalId: proposal.id,
+            });
+          }
+        }
+
+        // Completed proposals: Balance addition
+        if (proposal.status === 'completed') {
+          let amount = 0;
+          let description = '';
+
+          if (postType === 'offer' && isProvider) {
+            // Offer: provider receives
+            amount = parseFloat(proposal.timebank_hour);
+            description = `Completed "${proposal.post_title || 'Post'}" (Offer)`;
+          } else if (postType === 'need' && isRequester) {
+            // Need: requester receives
+            amount = parseFloat(proposal.timebank_hour);
+            description = `Completed "${proposal.post_title || 'Post'}" (Need)`;
+          }
+
+          if (amount !== 0) {
+            history.push({
+              id: `completed-${proposal.id}`,
+              type: 'addition',
+              amount,
+              description,
+              date: proposal.updated_at || proposal.created_at,
+              proposalId: proposal.id,
+            });
+          }
+        }
+
+        // Cancelled proposals (if was previously accepted): Balance refund
+        if (proposal.status === 'cancelled') {
+          let amount = 0;
+          let description = '';
+
+          if (postType === 'offer' && isRequester) {
+            // Offer: refund to requester
+            amount = parseFloat(proposal.timebank_hour);
+            description = `Cancelled proposal for "${proposal.post_title || 'Post'}" (Offer - Refund)`;
+          } else if (postType === 'need' && isProvider) {
+            // Need: refund to provider
+            amount = parseFloat(proposal.timebank_hour);
+            description = `Cancelled proposal for "${proposal.post_title || 'Post'}" (Need - Refund)`;
+          }
+
+          if (amount !== 0) {
+            history.push({
+              id: `cancelled-${proposal.id}`,
+              type: 'refund',
+              amount,
+              description,
+              date: proposal.updated_at || proposal.created_at,
+              proposalId: proposal.id,
+            });
+          }
+        }
+      });
+
+      // Sort by date (newest first)
+      history.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      setBalanceHistory(history);
+    } catch (error) {
+      console.error('Error fetching balance history:', error);
+      toast.error('Failed to load balance history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleBalanceCardClick = () => {
+    setShowBalanceHistory(true);
+    fetchBalanceHistory();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -253,7 +383,10 @@ export default function MyProfile() {
         </div>
 
         {/* TimeBank Balance Card */}
-        <Card className="p-6 bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+        <Card 
+          className="p-6 bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20 cursor-pointer hover:from-primary/15 hover:to-primary/10 transition-colors"
+          onClick={handleBalanceCardClick}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
@@ -261,7 +394,7 @@ export default function MyProfile() {
               </div>
               <div>
                 <h2 className="text-xl font-semibold">TimeBank Balance</h2>
-                <p className="text-sm text-slate-600">Your available time credits</p>
+                <p className="text-sm text-slate-600">Your available time credits - Click to view history</p>
               </div>
             </div>
             <div className="text-right">
@@ -793,6 +926,78 @@ export default function MyProfile() {
             </div>
           </div>
         </Card>
+
+        {/* Balance History Dialog */}
+        <Dialog open={showBalanceHistory} onOpenChange={setShowBalanceHistory}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl">TimeBank Balance History</DialogTitle>
+              <DialogDescription>
+                View all your timebank balance transactions and changes
+              </DialogDescription>
+            </DialogHeader>
+            
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : balanceHistory.length === 0 ? (
+              <div className="text-center py-12 text-slate-600">
+                <Clock className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                <p>No balance history found</p>
+              </div>
+            ) : (
+              <div className="space-y-3 mt-4">
+                {balanceHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-start gap-4 p-4 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      item.type === 'deduction' 
+                        ? 'bg-red-100 text-red-600' 
+                        : item.type === 'refund'
+                        ? 'bg-blue-100 text-blue-600'
+                        : 'bg-green-100 text-green-600'
+                    }`}>
+                      {item.type === 'deduction' ? (
+                        <TrendingDown className="w-5 h-5" />
+                      ) : (
+                        <TrendingUp className="w-5 h-5" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-900">{item.description}</p>
+                      <p className="text-sm text-slate-500 mt-1">
+                        {new Date(item.date).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
+                    <div className={`text-right flex-shrink-0 ${
+                      item.type === 'deduction' 
+                        ? 'text-red-600' 
+                        : item.type === 'refund'
+                        ? 'text-blue-600'
+                        : 'text-green-600'
+                    }`}>
+                      <p className={`font-bold text-lg ${
+                        item.type === 'deduction' ? 'text-red-600' : 'text-green-600'
+                      }`}>
+                        {item.type === 'deduction' ? '-' : '+'}{item.amount.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-slate-500">hours</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

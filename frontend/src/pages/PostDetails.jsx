@@ -411,7 +411,7 @@ export default function PostDetails() {
             </div>
           ) : (
             comments
-              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+              .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
               .map((comment) => {
                 const isLiked = likedComments.has(comment.id);
                 const displayLikes = comment.likes + (isLiked ? 1 : 0);
