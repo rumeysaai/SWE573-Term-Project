@@ -19,6 +19,48 @@ class Profile(models.Model):
     location = models.CharField(max_length=200, blank=True, null=True)
     interested_tags = models.ManyToManyField('Tag', blank=True, related_name='interested_profiles')
 
+    def get_review_averages(self):
+        """Calculate average ratings from all reviews received by this user"""
+        from django.db.models import Avg
+        reviews = Review.objects.filter(reviewed_user=self.user)
+        
+        if not reviews.exists():
+            return {
+                'friendliness': 0,
+                'time_management': 0,
+                'reliability': 0,
+                'communication': 0,
+                'work_quality': 0,
+                'overall': 0,
+                'total_reviews': 0,
+            }
+        
+        averages = reviews.aggregate(
+            avg_friendliness=Avg('friendliness'),
+            avg_time_management=Avg('time_management'),
+            avg_reliability=Avg('reliability'),
+            avg_communication=Avg('communication'),
+            avg_work_quality=Avg('work_quality'),
+        )
+        
+        overall = (
+            (averages['avg_friendliness'] or 0) +
+            (averages['avg_time_management'] or 0) +
+            (averages['avg_reliability'] or 0) +
+            (averages['avg_communication'] or 0) +
+            (averages['avg_work_quality'] or 0)
+        ) / 5
+        
+        return {
+            'friendliness': round(averages['avg_friendliness'] or 0, 2),
+            'time_management': round(averages['avg_time_management'] or 0, 2),
+            'reliability': round(averages['avg_reliability'] or 0, 2),
+            'communication': round(averages['avg_communication'] or 0, 2),
+            'work_quality': round(averages['avg_work_quality'] or 0, 2),
+            'overall': round(overall, 2),
+            'total_reviews': reviews.count(),
+        }
+
     def __str__(self):
         return f"{self.user.username}'s Profile"
 
@@ -191,6 +233,7 @@ class Proposal(models.Model):
                 provider_profile.save()
             
             # Update related Job status to cancelled
+            # Note: cancelled_by will be set in the view where we have access to request.user
             for job in self.jobs.all():
                 if job.status == 'waiting':
                     job.status = 'cancelled'
@@ -239,28 +282,16 @@ class Chat(models.Model):
         return f"{self.sender.username} -> {self.receiver.username}: {self.message[:50]}"
 
 
-class Comment(models.Model):
-    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
-    
-    text = models.TextField()
-    like_count = models.IntegerField(default=0)
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.user.username} commented on {self.post.title}: {self.text[:50]}"
-
-
 class Job(models.Model):
     STATUS_CHOICES = [
         ('waiting', 'Waiting'),
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
+    ]
+    
+    CANCELLATION_REASON_CHOICES = [
+        ('not_showed_up', 'Not Showed Up'),
+        ('other', 'Other'),
     ]
 
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='jobs')
@@ -274,6 +305,8 @@ class Job(models.Model):
     
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_jobs')
+    cancelled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_jobs')
+    cancellation_reason = models.CharField(max_length=20, choices=CANCELLATION_REASON_CHOICES, blank=True, null=True)
 
     class Meta:
         ordering = ['-updated_at']
@@ -292,3 +325,58 @@ class Job(models.Model):
 
     def __str__(self):
         return f"Job #{self.id} - {self.post.title} ({self.status})"
+
+class Comment(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    
+    text = models.TextField()
+    like_count = models.IntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} commented on {self.post.title}: {self.text[:50]}"
+
+
+class Review(models.Model):
+    """Review model for rating users after completed proposals"""
+    proposal = models.ForeignKey(Proposal, on_delete=models.CASCADE, related_name='reviews')
+    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_reviews')
+    reviewed_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_reviews')
+    
+    # Rating criteria (1-5 scale)
+    friendliness = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Rating from 1 to 5"
+    )
+    time_management = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Rating from 1 to 5"
+    )
+    reliability = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Rating from 1 to 5"
+    )
+    communication = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Rating from 1 to 5"
+    )
+    work_quality = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Rating from 1 to 5"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['proposal', 'reviewer']  # One review per proposal per reviewer
+
+    def __str__(self):
+        return f"{self.reviewer.username} reviewed {self.reviewed_user.username} for proposal {self.proposal.id}"

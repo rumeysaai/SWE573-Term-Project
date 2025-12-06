@@ -184,6 +184,7 @@ export default function Proposal() {
             responseMessage: providerResponseMessage,
             timestamp: new Date(proposal.created_at),
             status: proposal.status === 'waiting' ? 'pending' : (proposal.status === 'declined' ? 'declined' : proposal.status === 'completed' ? 'completed' : proposal.status === 'cancelled' ? 'cancelled' : proposal.status),
+            job_status: proposal.job_status, // Include job_status for filtering
           };
         });
         
@@ -264,12 +265,17 @@ export default function Proposal() {
   // Get the most recent proposal (sorted by timestamp, most recent first)
   const mostRecentProposal = sortedUserProposals.length > 0 ? sortedUserProposals[0] : null;
   
-  // Find user's accepted proposal
-  const acceptedProposal = sortedUserProposals.find(p => p.status === 'accepted');
+  // Find user's accepted proposal (exclude cancelled jobs)
+  const acceptedProposal = sortedUserProposals.find(p => 
+    p.status === 'accepted' && p.job_status !== 'cancelled'
+  );
   
   // Check if the most recent proposal is accepted (blocks new proposals)
   // If status is 'completed', allow new proposals
-  const hasAcceptedProposal = mostRecentProposal?.status === 'accepted' && mostRecentProposal?.status !== 'completed';
+  // If job_status is 'cancelled', allow new proposals (even if proposal status is 'accepted')
+  const hasAcceptedProposal = mostRecentProposal?.status === 'accepted' 
+    && mostRecentProposal?.status !== 'completed'
+    && mostRecentProposal?.job_status !== 'cancelled';
 
   // Calculate event datetime and check if cancellation is allowed (12 hours before event)
   const canCancelNegotiation = () => {

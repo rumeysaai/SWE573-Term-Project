@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
-from .models import Profile, Tag, Post, Comment, Proposal
+from .models import Profile, Tag, Post, Comment, Proposal, Review
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -10,9 +10,15 @@ class TagSerializer(serializers.ModelSerializer):
 
 # Simple profile serializer to get only avatar
 class ProfileSerializer(serializers.ModelSerializer):
+    review_averages = serializers.SerializerMethodField()
+    
+    def get_review_averages(self, obj):
+        """Get review averages for this profile"""
+        return obj.get_review_averages()
+    
     class Meta:
         model = Profile
-        fields = ['avatar', 'time_balance']
+        fields = ['avatar', 'time_balance', 'review_averages']
 
 class UserSerializer(serializers.ModelSerializer):
     # Show 'profile' field (with time_balance) together with user
@@ -28,6 +34,7 @@ class UserSerializer(serializers.ModelSerializer):
         # Get and return profile data
         return {
             'time_balance': obj.profile.time_balance,
+            'review_averages': obj.profile.get_review_averages(),
             'avatar': obj.profile.avatar,
             'bio': obj.profile.bio if hasattr(obj.profile, 'bio') else None,
             'phone': obj.profile.phone if hasattr(obj.profile, 'phone') else None,
@@ -210,9 +217,28 @@ class ProposalSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         # Check if there's a Job associated with this proposal
         job = instance.jobs.first()  # Get the first (and typically only) job for this proposal
-        if job and job.status == 'completed':
-            data['status'] = 'completed'
+        if job:
+            # Include job status and cancelled_by info in the response
+            data['job_status'] = job.status
+            data['job_cancellation_reason'] = job.cancellation_reason
+            if job.cancelled_by:
+                data['job_cancelled_by_id'] = job.cancelled_by.id
+                data['job_cancelled_by_username'] = job.cancelled_by.username
+            else:
+                data['job_cancelled_by_id'] = None
+                data['job_cancelled_by_username'] = None
+            if job.status == 'completed':
+                data['status'] = 'completed'
+            elif job.status == 'cancelled':
+                # Keep proposal status but include job_status for frontend filtering
+                data['status'] = instance.status
+            else:
+                data['status'] = instance.status
         else:
+            data['job_status'] = None
+            data['job_cancellation_reason'] = None
+            data['job_cancelled_by_id'] = None
+            data['job_cancelled_by_username'] = None
             data['status'] = instance.status
         return data
 
@@ -290,3 +316,33 @@ class ProposalSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'requester', 'provider', 'created_at', 'updated_at']
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    reviewer_id = serializers.IntegerField(source='reviewer.id', read_only=True)
+    reviewer_username = serializers.CharField(source='reviewer.username', read_only=True)
+    reviewed_user_id = serializers.IntegerField(source='reviewed_user.id', read_only=True)
+    reviewed_user_username = serializers.CharField(source='reviewed_user.username', read_only=True)
+    proposal_id = serializers.IntegerField(source='proposal.id', read_only=True)
+
+    class Meta:
+        model = Review
+        fields = [
+            'id',
+            'proposal',
+            'proposal_id',
+            'reviewer',
+            'reviewer_id',
+            'reviewer_username',
+            'reviewed_user',
+            'reviewed_user_id',
+            'reviewed_user_username',
+            'friendliness',
+            'time_management',
+            'reliability',
+            'communication',
+            'work_quality',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'reviewer', 'reviewed_user', 'created_at', 'updated_at']

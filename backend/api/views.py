@@ -6,10 +6,11 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import generics, permissions, viewsets, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 
-from .models import Post, Tag, Profile, Comment, Proposal
+from .models import Post, Tag, Profile, Comment, Proposal, Review, Job
 from django.contrib.auth.models import User
 from .serializers import (RegisterSerializer, 
     UserSerializer, 
@@ -17,7 +18,8 @@ from .serializers import (RegisterSerializer,
     TagSerializer,
     ProfileSerializer,
     CommentSerializer,
-    ProposalSerializer)
+    ProposalSerializer,
+    ReviewSerializer)
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -162,18 +164,28 @@ class UserProfileView(APIView):
     def get(self, request, username, *args, **kwargs):
         try:
             user = User.objects.get(username=username)
-            # Public data: username, avatar, time_balance (optional)
-            return Response({
-                'id': user.id,
-                'username': user.username,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'avatar': user.profile.avatar if hasattr(user, 'profile') else None,
-                'time_balance': float(user.profile.time_balance) if hasattr(user, 'profile') else 0.0,
-                'bio': user.profile.bio if hasattr(user, 'profile') and hasattr(user.profile, 'bio') else None,
-                'phone': user.profile.phone if hasattr(user, 'profile') and hasattr(user.profile, 'phone') else None,
-                'location': user.profile.location if hasattr(user, 'profile') and hasattr(user.profile, 'location') else None,
-            })
+            # Use UserSerializer to get profile data including review_averages
+            serializer = UserSerializer(user)
+            user_data = serializer.data
+            # Add first_name and last_name to response (public data)
+            user_data['first_name'] = user.first_name
+            user_data['last_name'] = user.last_name
+            # Ensure profile data structure is correct
+            if 'profile' in user_data:
+                # Profile data is already included from UserSerializer with review_averages
+                pass
+            else:
+                # Fallback: manually add profile data if serializer doesn't include it
+                profile = user.profile if hasattr(user, 'profile') else None
+                user_data['profile'] = {
+                    'avatar': profile.avatar if profile else None,
+                    'time_balance': float(profile.time_balance) if profile else 0.0,
+                    'bio': profile.bio if profile and hasattr(profile, 'bio') else None,
+                    'phone': profile.phone if profile and hasattr(profile, 'phone') else None,
+                    'location': profile.location if profile and hasattr(profile, 'location') else None,
+                    'review_averages': profile.get_review_averages() if profile else None,
+                }
+            return Response(user_data)
         except User.DoesNotExist:
             return Response(
                 {"error": "User not found."},
@@ -310,6 +322,80 @@ class ProposalViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         """Handle update with proper error handling for balance validation"""
         try:
+            instance = self.get_object()
+            
+            # Check if this is a decline action (from approval page)
+            # If proposal is already accepted and has jobs, we should only cancel the job, not the proposal
+            if 'decline_job' in request.data and request.data['decline_job']:
+                # This is a decline from approval page - only cancel the job, keep proposal status as accepted
+                from api.models import Profile
+                from rest_framework.response import Response
+                
+                # Cancel the job (at approval stage, job should be 'waiting')
+                job = instance.jobs.filter(status='waiting').first()
+                if not job:
+                    return Response(
+                        {'detail': 'No waiting job found to cancel.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                job.status = 'cancelled'
+                job.cancelled_by = request.user
+                
+                # Set cancellation_reason if provided
+                cancellation_reason = request.data.get('cancellation_reason', 'other')
+                if cancellation_reason in ['not_showed_up', 'other']:
+                    job.cancellation_reason = cancellation_reason
+                else:
+                    job.cancellation_reason = 'other'  # Default to 'other'
+                
+                job.save()
+                
+                # Handle balance based on cancellation_reason
+                if cancellation_reason == 'not_showed_up':
+                    # Transfer balance to the other party
+                    if instance.post.post_type == 'offer':
+                        # Offer: transfer to provider (post owner)
+                        provider_profile = instance.provider.profile
+                        provider_profile.time_balance += instance.timebank_hour
+                        provider_profile.save()
+                    elif instance.post.post_type == 'need':
+                        # Need: transfer to requester
+                        requester_profile = instance.requester.profile
+                        requester_profile.time_balance += instance.timebank_hour
+                        requester_profile.save()
+                else:  # 'other' - refund to original payer
+                    # Refund balance based on post type
+                    if instance.post.post_type == 'offer':
+                        # Offer: refund to requester
+                        requester_profile = instance.requester.profile
+                        requester_profile.time_balance += instance.timebank_hour
+                        requester_profile.save()
+                    elif instance.post.post_type == 'need':
+                        # Need: refund to provider
+                        provider_profile = instance.provider.profile
+                        provider_profile.time_balance += instance.timebank_hour
+                        provider_profile.save()
+                
+                # Update notes if provided
+                if 'notes' in request.data:
+                    instance.notes = (instance.notes or '') + '\n\n' + request.data['notes']
+                    instance.save()
+                
+                # Return updated instance without going through serializer validation
+                # because decline_job is not a valid serializer field
+                serializer = self.get_serializer(instance)
+                return Response(serializer.data)
+            
+            # Check if status is being changed to cancelled (regular cancellation)
+            if 'status' in request.data and request.data['status'] == 'cancelled':
+                # Update related jobs to set cancelled_by
+                for job in instance.jobs.all():
+                    if job.status == 'waiting':
+                        job.status = 'cancelled'
+                        job.cancelled_by = request.user
+                        job.save()
+            
             return super().update(request, *args, **kwargs)
         except ValidationError as e:
             from rest_framework.response import Response
@@ -318,3 +404,57 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 {'detail': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Review model
+    GET /api/reviews/ - List all reviews
+    GET /api/reviews/<id>/ - Get review details
+    POST /api/reviews/ - Create a new review
+    PUT /api/reviews/<id>/ - Update a review
+    DELETE /api/reviews/<id>/ - Delete a review
+    """
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Filter reviews by proposal, reviewer, or reviewed_user"""
+        queryset = Review.objects.all()
+        
+        # Filter by proposal ID
+        proposal_id = self.request.query_params.get('proposal', None)
+        if proposal_id is not None:
+            queryset = queryset.filter(proposal_id=proposal_id)
+        
+        # Filter by reviewed user
+        reviewed_user = self.request.query_params.get('reviewed_user', None)
+        if reviewed_user is not None:
+            queryset = queryset.filter(reviewed_user_id=reviewed_user)
+        
+        # Filter by reviewer
+        reviewer = self.request.query_params.get('reviewer', None)
+        if reviewer is not None:
+            queryset = queryset.filter(reviewer_id=reviewer)
+        
+        return queryset.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        """Set the reviewer to the current authenticated user"""
+        proposal = serializer.validated_data['proposal']
+        
+        # Determine reviewed_user based on post type and current user
+        post_type = proposal.post.post_type
+        is_requester = self.request.user.id == proposal.requester_id
+        is_provider = self.request.user.id == proposal.provider_id
+        
+        if post_type == 'offer' and is_requester:
+            # Offer: requester reviews provider
+            reviewed_user = proposal.provider
+        elif post_type == 'need' and is_provider:
+            # Need: provider reviews requester
+            reviewed_user = proposal.requester
+        else:
+            raise PermissionDenied("You are not authorized to create a review for this proposal.")
+        
+        serializer.save(reviewer=self.request.user, reviewed_user=reviewed_user)
