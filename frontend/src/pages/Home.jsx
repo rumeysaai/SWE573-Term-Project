@@ -32,7 +32,6 @@ import { SimpleSelect, SimpleSelectItem } from "../components/ui/SimpleSelect";
 import { SimpleDialog, SimpleDialogHeader, SimpleDialogTitle, SimpleDialogDescription } from "../components/ui/SimpleDialog";
 import { SimpleTabs, SimpleTabsList, SimpleTabsTrigger, SimpleTabsContent } from "../components/ui/SimpleTabs";
 import { useAuth } from "../App";
-import TagSelector from "../components/TagSelector";
 
 // Fix for default marker icons in Leaflet with React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -46,21 +45,19 @@ export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [posts, setPosts] = useState([]);
-  const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedPost, setSelectedPost] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("offers");
-  const [showAllPosts, setShowAllPosts] = useState(false);
+  const [visiblePostCount, setVisiblePostCount] = useState(8);
 
-  // Reset showAllPosts when tab changes
+  // Reset visiblePostCount when tab changes
   useEffect(() => {
-    setShowAllPosts(false);
+    setVisiblePostCount(8);
   }, [activeTab]);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTags, setSelectedTags] = useState([]); // Changed to array for multiple tag selection
   const [selectedLocation, setSelectedLocation] = useState("");
   const [selectedType, setSelectedType] = useState("");
 
@@ -120,27 +117,7 @@ export default function Home() {
       }
     };
 
-    const fetchTags = async () => {
-      try {
-        const response = await api.get('/tags/');
-        // Check if response.data is an array, if not, handle pagination
-        let tagsData = [];
-        if (Array.isArray(response.data)) {
-          tagsData = response.data;
-        } else if (response.data && typeof response.data === 'object') {
-          // Handle paginated response (DRF pagination)
-          tagsData = response.data.results || [];
-        }
-        setTags(tagsData); 
-      } catch (err) {
-        console.error("Error fetching tags:", err);
-        console.error("Error response:", err.response?.data);
-        setTags([]); // Set empty array on error
-      }
-    };
-
-    fetchPosts(); 
-    fetchTags();
+    fetchPosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount, filtering is done client-side 
 
@@ -152,32 +129,6 @@ export default function Home() {
       try {
         const typeMatch = selectedType ? post.type === selectedType : true;
         
-        // Match if any selected tag is in post tags
-        const tagMatch = selectedTags.length === 0 ? true : 
-          selectedTags.some(selectedTag => {
-            try {
-              // Handle different tag formats from TagSelector
-              let tagName = '';
-              if (typeof selectedTag === 'string') {
-                tagName = selectedTag;
-              } else if (selectedTag && typeof selectedTag === 'object') {
-                // TagSelector returns { name: ..., is_custom: ... } or { id: ..., name: ..., label: ... }
-                tagName = selectedTag.name || selectedTag.label || '';
-              }
-              if (!tagName) return false;
-              
-              if (!post.tags || !Array.isArray(post.tags)) return false;
-              
-              return post.tags.some(postTag => {
-                if (!postTag || typeof postTag !== 'string') return false;
-                return postTag.toLowerCase() === tagName.toLowerCase();
-              });
-            } catch (err) {
-              console.error('Error in tag matching:', err, selectedTag);
-              return false;
-            }
-          });
-        
         const locationMatch = selectedLocation 
           ? (post.location && typeof post.location === 'string' && post.location.toLowerCase().includes(selectedLocation.toLowerCase()))
           : true;
@@ -186,27 +137,33 @@ export default function Home() {
           ? (
               (post.title && typeof post.title === 'string' && post.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
               (post.description && typeof post.description === 'string' && post.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+              (post.postedBy && typeof post.postedBy === 'string' && post.postedBy.toLowerCase().includes(searchTerm.toLowerCase())) ||
+              (post.location && typeof post.location === 'string' && post.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
               (post.tags && Array.isArray(post.tags) && post.tags.some(tag => 
                 tag && typeof tag === 'string' && tag.toLowerCase().includes(searchTerm.toLowerCase())
               ))
             )
           : true;
         
-        return typeMatch && tagMatch && locationMatch && searchMatch;
+        return typeMatch && locationMatch && searchMatch;
       } catch (err) {
         console.error('Error filtering post:', err, post);
         return false;
       }
     });
-  }, [posts, selectedType, selectedTags, selectedLocation, searchTerm]);
+  }, [posts, selectedType, selectedLocation, searchTerm]);
 
 
   const offerPosts = filteredPosts.filter((post) => post.type === "offer");
   const needPosts = filteredPosts.filter((post) => post.type === "need");
   
-  // Limit posts to 5 if not showing all
-  const displayedOfferPosts = showAllPosts ? offerPosts : offerPosts.slice(0, 5);
-  const displayedNeedPosts = showAllPosts ? needPosts : needPosts.slice(0, 5);
+  // Display posts based on visiblePostCount
+  const displayedOfferPosts = offerPosts.slice(0, visiblePostCount);
+  const displayedNeedPosts = needPosts.slice(0, visiblePostCount);
+  
+  // Determine if there are more posts to show
+  const hasMoreOffers = offerPosts.length > visiblePostCount;
+  const hasMoreNeeds = needPosts.length > visiblePostCount;
   
   const mapPosts = activeTab === 'offers' ? offerPosts : needPosts;
   
@@ -251,33 +208,22 @@ export default function Home() {
     <div className="flex flex-col gap-6 bg-gray-50 pb-4">
       {/* Search Area */}
       <div className="space-y-4 mt-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            placeholder="Search by text, tag, or location..."
-            className="pl-10 bg-white border-primary/20 focus:border-primary"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="flex-1 min-w-[300px]">
-            <TagSelector
-              value={selectedTags}
-              onChange={(tags) => setSelectedTags(tags || [])}
-              placeholder="Filter by tags..."
-              isMulti={true}
+        <div className="flex gap-3 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              placeholder="Search by title, description, tag, location, or username..."
+              className="pl-10 bg-white border-primary/20 focus:border-primary"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="ml-auto">
-            <Link to="/post/new">
-              <Button className="shadow-md bg-primary hover:bg-primary/90 text-white" size="lg">
-                <Leaf className="w-4 h-4 mr-2" />
-                Publish an Offer
-              </Button>
-            </Link>
-          </div>
+          <Link to="/post/new">
+            <Button className="shadow-md bg-primary hover:bg-primary/90 text-white whitespace-nowrap" size="lg">
+              <Leaf className="w-4 h-4 mr-2" />
+              Publish an Offer
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -383,142 +329,185 @@ export default function Home() {
             </SimpleTabsTrigger>
           </SimpleTabsList>
 
-          <SimpleTabsContent value="offers" className="space-y-3 mt-4">
+          <SimpleTabsContent value="offers" className="mt-4">
             {loading && <Loader2 className="w-6 h-6 text-primary animate-spin mx-auto" />}
             {!loading && offerPosts.length === 0 && (
               <p className="text-gray-500 text-center py-4">No offers found matching the filter.</p>
             )}
-            {displayedOfferPosts.map((post) => (
-                <Card
-                  key={post.id}
-                  className="hover:border-primary hover:shadow-md transition-all cursor-pointer border-primary/20"
-                  onClick={() => handlePostClick(post)}
-                >
-                  <CardHeader className="p-4 pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-base">
-                          {post.title}
-                        </CardTitle>
-                        <div className="flex items-center flex-wrap gap-2 mt-2">
-                          {Array.isArray(post.tags) && post.tags.map((tag) => (
-                            <Badge
-                              key={tag}
-                              variant="secondary"
-                            >
-                              {tag}
-                            </Badge>
-                          ))}
+            {!loading && offerPosts.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {displayedOfferPosts.map((post) => (
+                  <Card
+                    key={post.id}
+                    className="hover:border-primary hover:shadow-md transition-all cursor-pointer border-primary/20 flex flex-col h-full"
+                    onClick={() => handlePostClick(post)}
+                  >
+                    <CardHeader className="p-4 pb-3 flex-1">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 flex gap-4 min-h-[120px]">
+                          {/* Post Image Preview */}
+                          <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
+                            {post.image ? (
+                              <img
+                                src={post.image}
+                                alt={post.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gray-100" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <CardTitle className="text-base flex-1 line-clamp-2">
+                                {post.title}
+                              </CardTitle>
+                              <Badge variant="offer" className="flex-shrink-0">
+                                Offer
+                              </Badge>
+                            </div>
+                            <div className="flex items-center flex-wrap gap-2 mb-2 min-h-[24px]">
+                              {Array.isArray(post.tags) && post.tags.length > 0 ? (
+                                post.tags.map((tag) => (
+                                  <Badge
+                                    key={tag}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <div className="h-6" />
+                              )}
+                            </div>
+                            <div className="space-y-1 mt-auto">
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+                                <span className="truncate">{post.location}</span>
+                              </div>
+                              {post.date && (
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
+                                  <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                </div>
+                              )}
+                              {post.frequency && (
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <RefreshCw className="w-4 h-4 text-primary flex-shrink-0" />
+                                  <span>{post.frequency === 'one-time' ? 'One-time' : post.frequency === 'weekly' ? 'Weekly' : post.frequency === 'monthly' ? 'Monthly' : post.frequency}</span>
+                                </div>
+                              )}
+                              {post.participantCount && post.participantCount > 1 && (
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <Users className="w-4 h-4 text-primary flex-shrink-0" />
+                                  <span>{post.participantCount} participants</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <Badge
-                        variant="offer"
-                      >
-                        Offer
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0 space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <MapPin className="w-4 h-4 text-primary" />
-                      <span>{post.location}</span>
-                    </div>
-                    {post.date && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="w-4 h-4 text-primary" />
-                        <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                      </div>
-                    )}
-                    {post.frequency && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <RefreshCw className="w-4 h-4 text-primary" />
-                        <span>{post.frequency === 'one-time' ? 'One-time' : post.frequency === 'weekly' ? 'Weekly' : post.frequency === 'monthly' ? 'Monthly' : post.frequency}</span>
-                      </div>
-                    )}
-                    {post.participantCount && post.participantCount > 1 && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Users className="w-4 h-4 text-primary" />
-                        <span>{post.participantCount} participants</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                  </Card>
+                ))}
+              </div>
+            )}
           </SimpleTabsContent>
 
-          <SimpleTabsContent value="needs" className="space-y-3 mt-4">
+          <SimpleTabsContent value="needs" className="mt-4">
              {loading && <Loader2 className="w-6 h-6 text-orange-500 animate-spin mx-auto" />}
              {!loading && needPosts.length === 0 && (
               <p className="text-gray-500 text-center py-4">No needs found matching the filter.</p>
             )}
-            {displayedNeedPosts.map((post) => (
-                <Card
-                  key={post.id}
-                  className="hover:border-orange-500 hover:shadow-md transition-all cursor-pointer border-primary/20"
-                  onClick={() => handlePostClick(post)}
-                >
-                  <CardHeader className="p-4 pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-base">
-                          {post.title}
-                        </CardTitle>
-                        <div className="flex items-center flex-wrap gap-2 mt-2">
-                          {Array.isArray(post.tags) && post.tags.map((tag) => (
-                            <Badge
-                              key={tag}
-                              variant="secondary"
-                            >
-                              {tag}
-                            </Badge>
-                          ))}
+            {!loading && needPosts.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {displayedNeedPosts.map((post) => (
+                  <Card
+                    key={post.id}
+                    className="hover:border-orange-500 hover:shadow-md transition-all cursor-pointer border-primary/20 flex flex-col h-full"
+                    onClick={() => handlePostClick(post)}
+                  >
+                    <CardHeader className="p-4 pb-3 flex-1">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 flex gap-4 min-h-[120px]">
+                          {/* Post Image Preview */}
+                          <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
+                            {post.image ? (
+                              <img
+                                src={post.image}
+                                alt={post.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gray-100" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <CardTitle className="text-base flex-1 line-clamp-2">
+                                {post.title}
+                              </CardTitle>
+                              <Badge variant="need" className="flex-shrink-0">
+                                Need
+                              </Badge>
+                            </div>
+                            <div className="flex items-center flex-wrap gap-2 mb-2 min-h-[24px]">
+                              {Array.isArray(post.tags) && post.tags.length > 0 ? (
+                                post.tags.map((tag) => (
+                                  <Badge
+                                    key={tag}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <div className="h-6" />
+                              )}
+                            </div>
+                            <div className="space-y-1 mt-auto">
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+                                <span className="truncate">{post.location}</span>
+                              </div>
+                              {post.date && (
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
+                                  <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                </div>
+                              )}
+                              {post.frequency && (
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <RefreshCw className="w-4 h-4 text-primary flex-shrink-0" />
+                                  <span>{post.frequency === 'one-time' ? 'One-time' : post.frequency === 'weekly' ? 'Weekly' : post.frequency === 'monthly' ? 'Monthly' : post.frequency}</span>
+                                </div>
+                              )}
+                              {post.participantCount && post.participantCount > 1 && (
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <Users className="w-4 h-4 text-primary flex-shrink-0" />
+                                  <span>{post.participantCount} participants</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <Badge
-                        variant="need"
-                      >
-                        Need
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0 space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <MapPin className="w-4 h-4 text-primary" />
-                      <span>{post.location}</span>
-                    </div>
-                    {post.date && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="w-4 h-4 text-primary" />
-                        <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                      </div>
-                    )}
-                    {post.frequency && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <RefreshCw className="w-4 h-4 text-primary" />
-                        <span>{post.frequency === 'one-time' ? 'One-time' : post.frequency === 'weekly' ? 'Weekly' : post.frequency === 'monthly' ? 'Monthly' : post.frequency}</span>
-                      </div>
-                    )}
-                    {post.participantCount && post.participantCount > 1 && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Users className="w-4 h-4 text-primary" />
-                        <span>{post.participantCount} participants</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                  </Card>
+                ))}
+              </div>
+            )}
           </SimpleTabsContent>
         </SimpleTabs>
       </div>
 
       {/* See More Button */}
-      {!showAllPosts && (
-        (activeTab === 'offers' && offerPosts.length > 5) ||
-        (activeTab === 'needs' && needPosts.length > 5)
-      ) && (
+      {((activeTab === 'offers' && hasMoreOffers) || (activeTab === 'needs' && hasMoreNeeds)) && (
         <div className="flex justify-center py-6">
           <Button
-            onClick={() => setShowAllPosts(true)}
+            onClick={() => setVisiblePostCount(prev => prev + 8)}
             className="bg-primary hover:bg-primary/90 text-white shadow-md"
             size="lg"
           >

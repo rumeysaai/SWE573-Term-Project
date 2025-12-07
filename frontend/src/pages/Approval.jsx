@@ -44,6 +44,7 @@ export default function Approval() {
     reliability: 0,
     communication: 0,
     work_quality: 0,
+    comment: '',
   });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = useState(false);
@@ -498,6 +499,7 @@ export default function Approval() {
         reliability: reviewData.reliability,
         communication: reviewData.communication,
         work_quality: reviewData.work_quality,
+        comment: reviewData.comment || '',
       });
       
       toast.success('Review submitted successfully!');
@@ -1210,6 +1212,21 @@ export default function Approval() {
                 </div>
               </div>
 
+              {/* Comment */}
+              <div className="space-y-2">
+                <Label htmlFor="review-comment" className="text-sm font-medium">
+                  Comment (Optional)
+                </Label>
+                <Textarea
+                  id="review-comment"
+                  placeholder="Share your experience with this user..."
+                  value={reviewData.comment}
+                  onChange={(e) => setReviewData({ ...reviewData, comment: e.target.value })}
+                  className="min-h-[100px]"
+                  rows={4}
+                />
+              </div>
+
               <Button
                 onClick={handleSubmitReview}
                 disabled={submittingReview || !reviewData.friendliness || !reviewData.time_management || !reviewData.reliability || !reviewData.communication || !reviewData.work_quality}
@@ -1266,6 +1283,12 @@ export default function Approval() {
                     <span>Work Quality: {existingReview.work_quality}/5</span>
                   </div>
                 </div>
+                {existingReview.comment && (
+                  <div className="mt-4 pt-4 border-t border-green-300">
+                    <p className="text-sm font-medium text-green-900 mb-2">Your Comment:</p>
+                    <p className="text-sm text-green-800 whitespace-pre-wrap">{existingReview.comment}</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
