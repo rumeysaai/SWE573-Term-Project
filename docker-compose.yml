@@ -21,6 +21,8 @@ services:
   # Backend Service (Django)
   backend:
     build: ./backend
+    ports:
+      - "8000:8000"  # Expose backend for local development
     networks:
       - internal_bridge # ADD: For frontend to see backend with this name
       - dokploy-network # ADD: For communication with Traefik

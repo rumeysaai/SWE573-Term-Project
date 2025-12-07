@@ -21,6 +21,7 @@ import {
   Send,
   ThumbsUp,
   Trash2,
+  Flag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
@@ -58,6 +59,7 @@ export default function PostDetails() {
           participantCount: postData.participant_count,
           date: postData.date,
           postedBy: postData.postedBy,
+          postedById: postData.posted_by_id,
           avatar: postData.avatar,
           postedDate: postData.postedDate,
           image: postData.image,
@@ -169,6 +171,21 @@ export default function PostDetails() {
     }
   };
 
+  const handleReportComment = async (commentId) => {
+    if (!user) {
+      toast.error('Please login to report comments');
+      return;
+    }
+
+    try {
+      await api.post(`/comments/${commentId}/report/`);
+      toast.success('Comment reported successfully');
+    } catch (error) {
+      console.error('Error reporting comment:', error);
+      toast.error('Failed to report comment');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -229,6 +246,33 @@ export default function PostDetails() {
                 <span>Posted {post.postedDate ? formatDistanceToNow(new Date(post.postedDate), { addSuffix: true }) : 'Recently'}</span>
               </div>
             </div>
+            {user && user.username !== post.postedBy && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-primary hover:bg-primary/90 text-white border-primary"
+                onClick={async () => {
+                  try {
+                    // Create or get existing chat with the post owner
+                    const response = await api.post('/chats/', {
+                      user_id: post.postedById
+                    });
+                    
+                    // Navigate to chat page with the chat ID
+                    navigate(`/chat?chatId=${response.data.id}`);
+                  } catch (err) {
+                    console.error('Error creating chat:', err);
+                    const errorMessage = err.response?.data?.error || err.message || 'Failed to create chat';
+                    toast.error(errorMessage);
+                    // If chat creation fails, still navigate to chat page
+                    navigate('/chat');
+                  }
+                }}
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Send Message
+              </Button>
+            )}
           </div>
 
           <Separator />
@@ -435,16 +479,29 @@ export default function PostDetails() {
                           </p>
                         </div>
                       </div>
-                      {user && comment.authorId === user.id && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteComment(comment.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {user && comment.authorId === user.id && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {user && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleReportComment(comment.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Flag className="w-4 h-4 mr-1" />
+                            Report
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <p className="text-slate-700 mb-3 ml-10">{comment.content}</p>
                     <div className="flex items-center gap-4 ml-10">

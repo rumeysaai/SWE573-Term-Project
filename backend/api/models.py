@@ -76,7 +76,9 @@ class Tag(models.Model):
     tag_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100, unique=True)
     label = models.CharField(max_length=200, blank=True, null=True)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True)
+    wikidata_id = models.CharField(max_length=20, blank=True, null=True, unique=True, help_text="Wikidata Q identifier (e.g., Q42)")
+    is_custom = models.BooleanField(default=False, help_text="True if user created this tag as free-text")
     
     def save(self, *args, **kwargs):
         if not self.tag_id or self.tag_id == 0:
@@ -89,6 +91,38 @@ class Tag(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ForumTopic(models.Model):
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='forum_topics')
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    image = models.TextField(blank=True, null=True, help_text="Base64 encoded image or image URL")
+    semantic_tags = models.ManyToManyField(Tag, blank=True, related_name='forum_topics')
+    is_hidden = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} by {self.author.username}"
+
+
+class ForumComment(models.Model):
+    topic = models.ForeignKey(ForumTopic, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='forum_comments')
+    content = models.TextField()
+    is_hidden = models.BooleanField(default=False)
+    report_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Comment by {self.author.username} on {self.topic.title}"
 
 class Post(models.Model):
     TYPE_CHOICES = [
@@ -119,6 +153,9 @@ class Post(models.Model):
     
     # Post image
     image = models.TextField(blank=True, null=True)
+    
+    # Moderation
+    is_hidden = models.BooleanField(default=False)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -319,6 +356,8 @@ class Comment(models.Model):
     
     text = models.TextField()
     like_count = models.IntegerField(default=0)
+    is_hidden = models.BooleanField(default=False)
+    report_count = models.IntegerField(default=0)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
