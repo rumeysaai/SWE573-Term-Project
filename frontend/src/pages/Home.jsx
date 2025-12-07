@@ -32,6 +32,7 @@ import { SimpleSelect, SimpleSelectItem } from "../components/ui/SimpleSelect";
 import { SimpleDialog, SimpleDialogHeader, SimpleDialogTitle, SimpleDialogDescription } from "../components/ui/SimpleDialog";
 import { SimpleTabs, SimpleTabsList, SimpleTabsTrigger, SimpleTabsContent } from "../components/ui/SimpleTabs";
 import { useAuth } from "../App";
+import TagSelector from "../components/TagSelector";
 
 // Fix for default marker icons in Leaflet with React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -59,7 +60,7 @@ export default function Home() {
   }, [activeTab]);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTag, setSelectedTag] = useState("");
+  const [selectedTags, setSelectedTags] = useState([]); // Changed to array for multiple tag selection
   const [selectedLocation, setSelectedLocation] = useState("");
   const [selectedType, setSelectedType] = useState("");
 
@@ -71,7 +72,7 @@ export default function Home() {
         
         const params = new URLSearchParams();
         if (selectedType) params.append('post_type', selectedType);
-        if (selectedTag) params.append('tags__name', selectedTag); 
+        // Note: Tag filtering is done client-side, not via API params
         if (selectedLocation) params.append('location', selectedLocation);
         if (searchTerm) params.append('search', searchTerm); 
 
@@ -144,18 +145,60 @@ export default function Home() {
   }, []); // Only run once on mount, filtering is done client-side 
 
 
-  const filteredPosts = posts.filter(post => {
-    const typeMatch = selectedType ? post.type === selectedType : true;
-    const tagMatch = selectedTag ? post.tags.includes(selectedTag) : true;
-    const locationMatch = selectedLocation ? post.location.toLowerCase().includes(selectedLocation.toLowerCase()) : true;
-    const searchMatch = searchTerm ? 
-      post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      post.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      post.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-      : true;
+  const filteredPosts = React.useMemo(() => {
+    if (!Array.isArray(posts)) return [];
     
-    return typeMatch && tagMatch && locationMatch && searchMatch;
-  });
+    return posts.filter(post => {
+      try {
+        const typeMatch = selectedType ? post.type === selectedType : true;
+        
+        // Match if any selected tag is in post tags
+        const tagMatch = selectedTags.length === 0 ? true : 
+          selectedTags.some(selectedTag => {
+            try {
+              // Handle different tag formats from TagSelector
+              let tagName = '';
+              if (typeof selectedTag === 'string') {
+                tagName = selectedTag;
+              } else if (selectedTag && typeof selectedTag === 'object') {
+                // TagSelector returns { name: ..., is_custom: ... } or { id: ..., name: ..., label: ... }
+                tagName = selectedTag.name || selectedTag.label || '';
+              }
+              if (!tagName) return false;
+              
+              if (!post.tags || !Array.isArray(post.tags)) return false;
+              
+              return post.tags.some(postTag => {
+                if (!postTag || typeof postTag !== 'string') return false;
+                return postTag.toLowerCase() === tagName.toLowerCase();
+              });
+            } catch (err) {
+              console.error('Error in tag matching:', err, selectedTag);
+              return false;
+            }
+          });
+        
+        const locationMatch = selectedLocation 
+          ? (post.location && typeof post.location === 'string' && post.location.toLowerCase().includes(selectedLocation.toLowerCase()))
+          : true;
+        
+        const searchMatch = searchTerm 
+          ? (
+              (post.title && typeof post.title === 'string' && post.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+              (post.description && typeof post.description === 'string' && post.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+              (post.tags && Array.isArray(post.tags) && post.tags.some(tag => 
+                tag && typeof tag === 'string' && tag.toLowerCase().includes(searchTerm.toLowerCase())
+              ))
+            )
+          : true;
+        
+        return typeMatch && tagMatch && locationMatch && searchMatch;
+      } catch (err) {
+        console.error('Error filtering post:', err, post);
+        return false;
+      }
+    });
+  }, [posts, selectedType, selectedTags, selectedLocation, searchTerm]);
 
 
   const offerPosts = filteredPosts.filter((post) => post.type === "offer");
@@ -219,16 +262,14 @@ export default function Home() {
         </div>
 
         <div className="flex flex-wrap gap-3 items-center">
-          <SimpleSelect
-            placeholder="Filter by tag"
-            onValueChange={setSelectedTag}
-          >
-            {Array.isArray(tags) && tags.map((tag) => (
-              <SimpleSelectItem key={tag.id} value={tag.name}>
-                {tag.name}
-              </SimpleSelectItem>
-            ))}
-          </SimpleSelect>
+          <div className="flex-1 min-w-[300px]">
+            <TagSelector
+              value={selectedTags}
+              onChange={(tags) => setSelectedTags(tags || [])}
+              placeholder="Filter by tags..."
+              isMulti={true}
+            />
+          </div>
           <div className="ml-auto">
             <Link to="/post/new">
               <Button className="shadow-md bg-primary hover:bg-primary/90 text-white" size="lg">

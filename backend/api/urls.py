@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import PostViewSet, TagViewSet, CommentViewSet, ProposalViewSet, ReviewViewSet, ChatViewSet
+from .views import PostViewSet, TagViewSet, CommentViewSet, ProposalViewSet, ReviewViewSet, ChatViewSet, ForumTopicViewSet, ForumCommentViewSet
 from . import views
 
 router = DefaultRouter()
@@ -10,6 +10,8 @@ router.register(r'comments', CommentViewSet, basename='comment')
 router.register(r'proposals', ProposalViewSet, basename='proposal')
 router.register(r'reviews', ReviewViewSet, basename='review')
 router.register(r'chats', ChatViewSet, basename='chat')
+router.register(r'forum-topics', ForumTopicViewSet, basename='forum-topic')
+router.register(r'forum-comments', ForumCommentViewSet, basename='forum-comment')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -20,4 +22,5 @@ urlpatterns = [
     path('session/', views.SessionView.as_view(), name='session'),
     path('users/me/', views.MyProfileView.as_view(), name='my-profile'),  # Must come before users/<str:username>/
     path('users/<str:username>/', views.UserProfileView.as_view(), name='user-profile'),
+    path('admin-dashboard/', views.AdminDashboardView.as_view(), name='admin-dashboard'),
 ]

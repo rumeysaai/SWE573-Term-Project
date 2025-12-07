@@ -134,3 +134,17 @@ STATIC_URL = 'django-static/'
 # Data upload size for base64 image uploads (10MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
+
+# CACHE Configuration
+# Used for caching Wikidata API responses (1 hour cache)
+# LocMemCache is sufficient for single-server deployments
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',  # Unique identifier for this cache
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,  # Maximum number of entries in cache
+        },
+        'TIMEOUT': 3600,  # Default timeout: 1 hour (used as fallback if not specified in cache.set())
+    }
+}

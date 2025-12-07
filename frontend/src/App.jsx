@@ -16,8 +16,9 @@ import Signup from './pages/Signup';
 import Profile from './pages/Profile';
 import MyProfile from './pages/MyProfile';
 import Forum from './pages/Forum';
-import ForumDetails from './pages/ForumDetails';
-import Admin from './pages/Admin';
+import Forums from './pages/Forums';
+import TopicDetail from './pages/TopicDetail';
+import AdminDashboard from './pages/AdminDashboard';
 import HowTo from './pages/HowTo';
 import TimeBank from './pages/TimeBank';
 import About from './pages/About';
@@ -201,12 +202,16 @@ export default function App() {
                 element={<ProtectedRoute><Profile /></ProtectedRoute>}
               />
               <Route
-                path="/forum"
+                path="/forum/new"
                 element={<ProtectedRoute><Forum /></ProtectedRoute>}
               />
               <Route
-                path="/forum/:topicId"
-                element={<ProtectedRoute><ForumDetails /></ProtectedRoute>}
+                path="/forums"
+                element={<ProtectedRoute><Forums /></ProtectedRoute>}
+              />
+              <Route
+                path="/forum/:id"
+                element={<ProtectedRoute><TopicDetail /></ProtectedRoute>}
               />
               <Route
                 path="/chat"
@@ -226,7 +231,7 @@ export default function App() {
               />
               <Route
                 path="/admin-panel"
-                element={<AdminRoute><Admin /></AdminRoute>}
+                element={<AdminRoute><AdminDashboard /></AdminRoute>}
               />
               
               <Route path="*" element={<Navigate to="/" />} />

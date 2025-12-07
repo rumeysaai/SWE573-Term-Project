@@ -1,6 +1,6 @@
 // src/pages/SignupPage.jsx
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../api'; 
 import { useAuth } from '../App'; 
@@ -13,23 +13,31 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Checkbox } from '../components/ui/checkbox';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
-import { Leaf, UserPlus, MapPin, Briefcase, Heart, FileText } from 'lucide-react'; 
+import { Leaf, UserPlus, MapPin, FileText, Tag, Loader2 } from 'lucide-react';
+import TagSelector from '../components/TagSelector'; 
 
 export default function Signup() { 
     const [formData, setFormData] = useState({
       userName: '',
+      firstName: '',
+      lastName: '',
       email: '',
       password: '',
       confirmPassword: '',
       location: '',
       bio: '',
-      skills: [],
-      needs: [],
-      additionalInfo: '',
+      interestedTags: [], // TagSelector format for interests/tags
       acceptedTerms: false,
     });
     
     const [loading, setLoading] = useState(false);
+    
+    // Location autocomplete states
+    const [locationInput, setLocationInput] = useState('');
+    const [locationSuggestions, setLocationSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [locationLoading, setLocationLoading] = useState(false);
+    const locationTimeoutRef = useRef(null);
     
     const navigate = useNavigate();
     const { setUser } = useAuth();
@@ -38,43 +46,69 @@ export default function Signup() {
       const { id, value } = e.target;
       setFormData(prev => ({ ...prev, [id]: value }));
     };
+
+    // Location autocomplete functions
+    const searchLocation = async (query) => {
+      if (query.length < 3) {
+        setLocationSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
+
+      setLocationLoading(true);
+      try {
+        // OpenStreetMap Nominatim API - Global search 
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en`
+        );
+        const data = await response.json();
+        
+        setLocationSuggestions(data);
+        setShowSuggestions(true);
+      } catch (err) {
+        console.error("Location search error:", err);
+        setLocationSuggestions([]);
+      } finally {
+        setLocationLoading(false);
+      }
+    };
+
+    const handleLocationInputChange = (e) => {
+      const value = e.target.value;
+      setLocationInput(value);
+      setFormData(prev => ({ ...prev, location: value }));
+      
+      // Clear previous timeout
+      if (locationTimeoutRef.current) {
+        clearTimeout(locationTimeoutRef.current);
+      }
+      
+      // Debounce için timeout
+      locationTimeoutRef.current = setTimeout(() => {
+        searchLocation(value);
+      }, 300);
+    };
+
+    const handleLocationSelect = (suggestion) => {
+      setLocationInput(suggestion.display_name);
+      setFormData(prev => ({ ...prev, location: suggestion.display_name }));
+      setShowSuggestions(false);
+      setLocationSuggestions([]);
+    };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+      return () => {
+        if (locationTimeoutRef.current) {
+          clearTimeout(locationTimeoutRef.current);
+        }
+      };
+    }, []);
   
     const handleCheckboxChange = (checked) => {
       setFormData(prev => ({ ...prev, acceptedTerms: !!checked }));
     };
 
-    const handleSkillToggle = (skill) => {
-      setFormData(prev => {
-        const skills = prev.skills.includes(skill)
-          ? prev.skills.filter(s => s !== skill)
-          : [...prev.skills, skill];
-        return { ...prev, skills };
-      });
-    };
-
-    const handleNeedToggle = (need) => {
-      setFormData(prev => {
-        const needs = prev.needs.includes(need)
-          ? prev.needs.filter(n => n !== need)
-          : [...prev.needs, need];
-        return { ...prev, needs };
-      });
-    };
-
-    const skillsList = [
-      "Education & Tutoring",
-      "Home & Garden",
-      "Technology & IT",
-      "Arts & Crafts",
-      "Health & Wellness",
-      "Transportation",
-      "Childcare",
-      "Language Exchange",
-      "Cooking & Food",
-      "Pet Care",
-      "Repairs & Maintenance",
-      "Event Planning"
-    ];
   
     const handleSubmit = async (e) => {
       e.preventDefault();
@@ -98,9 +132,14 @@ export default function Signup() {
       try {
         const response = await api.post('/register/', {
           username: formData.userName,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
           email: formData.email,
           password: formData.password,
           password2: formData.confirmPassword,
+          interested_tags: formData.interestedTags || [],
+          location: formData.location,
+          bio: formData.bio,
         });
   
         setLoading(false);
@@ -163,6 +202,30 @@ export default function Signup() {
                       className="bg-card border-primary/20 focus:border-primary"
                     />
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        type="text"
+                        placeholder="Enter your first name"
+                        value={formData.firstName}
+                        onChange={handleChange}
+                        className="bg-card border-primary/20 focus:border-primary"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        type="text"
+                        placeholder="Enter your last name"
+                        value={formData.lastName}
+                        onChange={handleChange}
+                        className="bg-card border-primary/20 focus:border-primary"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -218,16 +281,52 @@ export default function Signup() {
                 <div className="space-y-4 pl-7">
                   <div className="space-y-2">
                     <Label htmlFor="location">Location</Label>
-                    <Input
-                      id="location"
-                      type="text"
-                      placeholder="e.g., Kadıköy, Istanbul"
-                      value={formData.location}
-                      onChange={handleChange}
-                      className="bg-card border-primary/20 focus:border-primary"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="location"
+                        type="text"
+                        placeholder="Type location (e.g., Kadıköy, Istanbul...)"
+                        value={locationInput}
+                        onChange={handleLocationInputChange}
+                        onFocus={() => {
+                          if (locationSuggestions.length > 0) {
+                            setShowSuggestions(true);
+                          }
+                        }}
+                        onBlur={() => {
+                          // Delay to allow click on suggestion
+                          setTimeout(() => setShowSuggestions(false), 200);
+                        }}
+                        className="bg-card border-primary/20 focus:border-primary"
+                      />
+                      {locationLoading && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                        </div>
+                      )}
+                      
+                      {/* Suggestions Dropdown */}
+                      {showSuggestions && locationSuggestions.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                          {locationSuggestions.map((suggestion, index) => (
+                            <div
+                              key={index}
+                              onClick={() => handleLocationSelect(suggestion)}
+                              className="px-4 py-2 hover:bg-primary/5 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            >
+                              <div className="font-medium text-sm text-gray-900">
+                                {suggestion.display_name.split(',')[0]}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {suggestion.display_name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Helps connect you with nearby community members
+                      Start typing to search for locations. Helps connect you with nearby community members.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -248,67 +347,90 @@ export default function Signup() {
 
               <Separator className="bg-primary/20" />
 
-              {/* Skills & Interests */}
+              {/* Interests (Tags) */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-primary">
-                  <Briefcase className="w-5 h-5" />
-                  <h3>Skills I Can Offer</h3>
+                  <Tag className="w-5 h-5" />
+                  <h3>Interests</h3>
                 </div>
                 
                 <div className="pl-7">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Select the services you can provide to the community
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Select your areas of interest. These will appear on your profile.
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {skillsList.map((skill) => (
-                      <div key={skill} className="flex items-center space-x-2 bg-secondary/10 p-2 rounded-lg border border-primary/10 hover:bg-secondary/20 transition-colors">
-                        <Checkbox 
-                          id={`skill-${skill}`}
-                          checked={formData.skills.includes(skill)}
-                          onCheckedChange={() => handleSkillToggle(skill)}
-                        />
-                        <Label
-                          htmlFor={`skill-${skill}`}
-                          className="text-sm cursor-pointer"
-                        >
-                          {skill}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      "Education & Tutoring",
+                      "Home & Garden",
+                      "Technology",
+                      "Arts & Crafts Production",
+                      "Health Lifestyle",
+                      "Childcare",
+                      "Language Exchange",
+                      "Cooking & Food",
+                      "Pet Care",
+                      "Repairs & Maintenance",
+                      "Event Planning"
+                    ].map((tagName) => {
+                      const isSelected = formData.interestedTags.some(
+                        tag => (tag.name || tag.label || tag) === tagName
+                      );
+                      const tagId = `tag-${tagName.replace(/\s+/g, '-').toLowerCase()}`;
+                      const handleTagToggle = (checked) => {
+                        const currentTags = formData.interestedTags || [];
+                        if (checked) {
+                          // Check if already exists to prevent duplicates
+                          if (!currentTags.some(tag => (tag.name || tag.label || tag) === tagName)) {
+                            setFormData(prev => ({
+                              ...prev,
+                              interestedTags: [
+                                ...currentTags,
+                                { name: tagName, label: tagName }
+                              ]
+                            }));
+                          }
+                        } else {
+                          setFormData(prev => ({
+                            ...prev,
+                            interestedTags: currentTags.filter(
+                              tag => (tag.name || tag.label || tag) !== tagName
+                            )
+                          }));
+                        }
+                      };
 
-              <Separator className="bg-primary/20" />
-
-              {/* Interests & Needs */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-primary">
-                  <Heart className="w-5 h-5" />
-                  <h3>Services I'm Looking For</h3>
-                </div>
-                
-                <div className="pl-7">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Select the services you'd like to receive from the community
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {skillsList.map((need) => (
-                      <div key={need} className="flex items-center space-x-2 bg-secondary/10 p-2 rounded-lg border border-primary/10 hover:bg-secondary/20 transition-colors">
-                        <Checkbox 
-                          id={`need-${need}`}
-                          checked={formData.needs.includes(need)}
-                          onCheckedChange={() => handleNeedToggle(need)}
-                        />
-                        <Label
-                          htmlFor={`need-${need}`}
-                          className="text-sm cursor-pointer"
+                      return (
+                        <div
+                          key={tagName}
+                          className={`
+                            flex items-center space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all
+                            ${isSelected 
+                              ? 'border-primary bg-primary/5 text-primary' 
+                              : 'border-border bg-card hover:border-primary/50 hover:bg-accent/50'
+                            }
+                          `}
                         >
-                          {need}
-                        </Label>
-                      </div>
-                    ))}
+                          <Checkbox
+                            id={tagId}
+                            checked={isSelected}
+                            onCheckedChange={handleTagToggle}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                          />
+                          <Label 
+                            htmlFor={tagId}
+                            className="text-sm font-medium cursor-pointer flex-1"
+                          >
+                            {tagName}
+                          </Label>
+                        </div>
+                      );
+                    })}
                   </div>
+                  {formData.interestedTags && formData.interestedTags.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      {formData.interestedTags.length} interest{formData.interestedTags.length !== 1 ? 's' : ''} selected
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -322,19 +444,16 @@ export default function Signup() {
                 </div>
                 
                 <div className="pl-7">
-                  <div className="space-y-2">
-                    <Label htmlFor="additionalInfo">Additional Information</Label>
-                    <Textarea
-                      id="additionalInfo"
-                      placeholder="Is there anything else you'd like to share with the community?"
-                      value={formData.additionalInfo}
-                      onChange={handleChange}
-                      className="bg-card border-primary/20 focus:border-primary min-h-[100px] resize-none"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Optional: Share any additional information, special requests, or preferences
-                    </p>
-                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Select your interests. You can search from existing tags or create new ones.
+                  </p>
+                  <TagSelector
+                    value={formData.interestedTags}
+                    onChange={(tags) => setFormData(prev => ({ ...prev, interestedTags: tags || [] }))}
+                    placeholder="Search interests (e.g., cooking, gardening, coding, tutoring...)"
+                    isMulti={true}
+                    showAllTagsOnOpen={true}
+                  />
                 </div>
               </div>
 

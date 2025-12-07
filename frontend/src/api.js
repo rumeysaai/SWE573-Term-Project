@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // 1. Backend URL'sini .env dosyasından oku
-const baseURL = process.env.REACT_APP_API_URL || '/api';
+const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 axios.defaults.withCredentials = true;
 
 // 2. CSRF Token'ını cookie'den okumak için bir yardımcı fonksiyon

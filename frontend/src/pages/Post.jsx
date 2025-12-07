@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../App';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
-import { Badge } from '../components/ui/badge';
 import { 
   PenLine, 
   X, 
@@ -18,13 +17,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
+import TagSelector from '../components/TagSelector';
 
 export default function Post() {
   const { id } = useParams();
@@ -52,9 +45,7 @@ export default function Post() {
   const [frequency, setFrequency] = useState('one-time');
   const [isGroupActivity, setIsGroupActivity] = useState(false);
 
-  const [allTags, setAllTags] = useState([]); 
-  const [selectedTagIds, setSelectedTagIds] = useState([]);
-  const [tagInput, setTagInput] = useState(''); 
+  const [selectedTags, setSelectedTags] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -66,16 +57,20 @@ export default function Post() {
   const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => {
-    
-    api.get('/tags/')
-      .then(res => setAllTags(res.data))
-      .catch(err => console.error("Etiketler çekilemedi:", err));
-
     if (isEditing) {
       setLoading(true);
       api.get(`/posts/${id}/`)
         .then(response => {
           const { title, description, post_type, location, duration, tags, frequency, participant_count, date, latitude, longitude, image } = response.data;
+          
+          // Convert tags from API (string array) to TagSelector format
+          const tagObjects = Array.isArray(tags) ? tags.map(tagName => ({
+            name: tagName,
+            label: tagName,
+            // Note: IDs will be resolved when TagSelector loads options
+          })) : [];
+          
+          setSelectedTags(tagObjects);
           
           setPost({ 
             title, 
@@ -85,7 +80,7 @@ export default function Post() {
             latitude: latitude || null,
             longitude: longitude || null,
             duration,
-            tags: tags,
+            tags: tags, // Keep as array for now
             image: image || ''
           });
           
@@ -111,53 +106,25 @@ export default function Post() {
     }
   }, [id, isEditing]);
 
-  useEffect(() => {
-    if (allTags.length > 0 && isEditing && Array.isArray(post.tags) && post.tags.length > 0 && typeof post.tags[0] === 'string') {
-      const tagIds = post.tags.map(tagName => {
-        const tag = allTags.find(t => t.name === tagName);
-        return tag ? tag.id : null;
-      }).filter(id => id !== null);
-      
-      setSelectedTagIds(tagIds);
-      setPost(prev => ({ ...prev, tags: tagIds }));
-    }
-  }, [allTags, isEditing, post.tags]);
 
-
-  const handleAddTag = async () => {
-    if (tagInput.trim()) {
-      
-      const existingTag = allTags.find(t => t.name.toLowerCase() === tagInput.trim().toLowerCase());
-      
-      if (existingTag) {
-       
-        if (!selectedTagIds.includes(existingTag.id)) {
-          setSelectedTagIds([...selectedTagIds, existingTag.id]);
-          setPost(prev => ({ ...prev, tags: [...prev.tags, existingTag.id] }));
-        }
+  const handleTagsChange = (tags) => {
+    // TagSelector returns array of tag objects like [{id: 1}, {name: "new tag", is_custom: true}, ...]
+    setSelectedTags(tags || []);
+    
+    // Convert to array of IDs for backend
+    const tagIds = (tags || []).map(tag => {
+      if (tag.id) {
+        return tag.id;
       } else {
-       
-        try {
-          const response = await api.post('/tags/', { name: tagInput.trim() });
-          const newTag = response.data;
-          setAllTags([...allTags, newTag]);
-          setSelectedTagIds([...selectedTagIds, newTag.id]);
-          setPost(prev => ({ ...prev, tags: [...prev.tags, newTag.id] }));
-        } catch (err) {
-          console.error("Tag oluşturulamadı:", err);
-          toast.error('Tag oluşturulamadı. Lütfen tekrar deneyin.');
-        }
+        // For new custom tags, we'll send the full object and let backend create them
+        // But for now, we'll just track them separately
+        return tag;
       }
-      setTagInput('');
-    }
-  };
-
-  const handleRemoveTag = (tagIdToRemove) => {
-    setSelectedTagIds(selectedTagIds.filter(id => id !== tagIdToRemove));
-    setPost(prev => ({ 
-      ...prev, 
-      tags: prev.tags.filter(id => id !== tagIdToRemove) 
-    }));
+    });
+    
+    // Filter out non-ID items and extract IDs
+    const idsOnly = tagIds.filter(item => typeof item === 'number');
+    setPost(prev => ({ ...prev, tags: idsOnly.length > 0 ? idsOnly : tagIds }));
   };
 
   // Location autocomplete functions
@@ -247,6 +214,21 @@ export default function Post() {
 
     const durationString = `${estimatedHours} hours`;
 
+    // Prepare tags_data: convert to format expected by backend (IDs or tag objects)
+    const tags_data = selectedTags.map(tag => {
+      if (tag.id) {
+        return { id: tag.id };
+      } else {
+        // Custom tag (no ID yet) - send as object with name
+        return {
+          name: tag.name || tag.label || tag.value,
+          is_custom: true,
+          wikidata_id: tag.wikidata_id || null,
+          description: tag.description || ''
+        };
+      }
+    });
+
     const dataToSend = {
       title: post.title,
       description: post.description,
@@ -255,7 +237,7 @@ export default function Post() {
       latitude: post.latitude,
       longitude: post.longitude,
       duration: durationString,
-      tags_ids: post.tags, 
+      tags_data: tags_data,
       frequency: frequency || null,
       participant_count: participantCount || null,
       date: date || null,
@@ -312,10 +294,6 @@ export default function Post() {
     );
   }
 
-  const getTagNameById = (tagId) => {
-    const tag = allTags.find(t => t.id === tagId);
-    return tag ? tag.name : '';
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-4">
@@ -458,51 +436,15 @@ export default function Post() {
             {/* Tags */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-700">Tags (Minimum 1 Required)</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Add a tag"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddTag();
-                    }
-                  }}
-                  className="h-10 text-sm border-primary/20"
-                />
-                <Button 
-                  type="button" 
-                  onClick={handleAddTag}
-                  className="h-10 px-4"
-                >
-                  Add
-                </Button>
-              </div>
-              
-              {selectedTagIds.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedTagIds.map((tagId) => {
-                    const tagName = getTagNameById(tagId);
-                    if (!tagName) return null;
-                    return (
-                      <Badge 
-                        key={tagId} 
-                        className="bg-gray-200 text-gray-800 hover:bg-gray-300 px-2.5 py-0.5 text-xs font-semibold"
-                      >
-                        {tagName}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTag(tagId)}
-                          className="ml-2 hover:text-red-600"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
+              <TagSelector
+                value={selectedTags}
+                onChange={handleTagsChange}
+                placeholder="Search or create tags (e.g., cooking, gardening, coding...)"
+                isMulti={true}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Search from existing tags or create new ones. You can select multiple tags.
+              </p>
             </div>
 
             {/* Duration, Date, Participants */}
@@ -698,7 +640,7 @@ export default function Post() {
               <Button 
                 type="submit" 
                 className="h-10 text-sm shadow-md"
-                disabled={loading || post.tags.length === 0}
+                disabled={loading || selectedTags.length === 0}
               >
                 {loading ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />

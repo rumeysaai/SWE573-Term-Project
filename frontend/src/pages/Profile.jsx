@@ -24,6 +24,7 @@ import {
   MessageSquare,
   Star,
   XCircle,
+  Tag,
 } from "lucide-react";
 
 export default function Profile() {
@@ -36,6 +37,7 @@ export default function Profile() {
   const [cancelledJobs, setCancelledJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [interestedTags, setInterestedTags] = useState([]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -54,6 +56,55 @@ export default function Profile() {
         ]);
         
         setProfileData(profileResponse.data);
+        console.log('Profile: Full profile data from backend:', profileResponse.data);
+        console.log('Profile: Location from backend:', profileResponse.data?.profile?.location || profileResponse.data?.location);
+        
+        // Fetch interested tags if available
+        const interestedTagIds = profileResponse.data?.profile?.interested_tags || [];
+        console.log('Profile: interested_tag_ids from backend:', interestedTagIds);
+        
+        if (interestedTagIds.length > 0) {
+          try {
+            const tagsResponse = await api.get('/tags/');
+            let allTagsData = [];
+            if (Array.isArray(tagsResponse.data)) {
+              allTagsData = tagsResponse.data;
+            } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
+              allTagsData = tagsResponse.data.results || [];
+            }
+            
+            console.log('Profile: fetched all tags count:', allTagsData.length);
+            
+            // Map tag IDs to tag objects
+            const tags = interestedTagIds.map(tagId => {
+              const tag = allTagsData.find(t => {
+                const tId = typeof t.id === 'string' ? parseInt(t.id, 10) : t.id;
+                const searchId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
+                return tId === searchId;
+              });
+              return tag ? {
+                id: tag.id,
+                name: tag.name || tag.label,
+                label: tag.label || tag.name,
+              } : null;
+            }).filter(Boolean);
+            
+            console.log('Profile: mapped interested tags:', tags);
+            if (tags.length > 0) {
+              setInterestedTags(tags);
+              console.log('Profile: setInterestedTags called with', tags.length, 'tags');
+            } else {
+              console.log('Profile: No tags matched, setting empty array');
+              setInterestedTags([]);
+            }
+          } catch (error) {
+            console.error('Error fetching interested tags:', error);
+            setInterestedTags([]);
+          }
+        } else {
+          console.log('Profile: No interested tags found in profile data, setting empty array');
+          setInterestedTags([]);
+        }
         
         // Format posts data
         let postsData = [];
@@ -281,7 +332,7 @@ export default function Profile() {
                 </AvatarFallback>
               </Avatar>
               
-              {/* Username, About Me and Send Message Button */}
+              {/* Username, About Me */}
               <div className="flex flex-col items-center lg:items-start gap-3 w-full">
                 <Label className="text-base">{profileData.username}</Label>
                 
@@ -293,32 +344,49 @@ export default function Profile() {
                   </div>
                 )}
                 
-                {user && user.username !== profileData.username && (
-                  <Button 
-                    className="bg-primary hover:bg-primary/90 text-white"
-                    onClick={async () => {
-                      try {
-                        // Create or get existing chat with the profile user
-                        const response = await api.post('/chats/', {
-                          user_id: profileData.id
-                        });
-                        
-                        // Navigate to chat page with the chat ID
-                        navigate(`/chat?chatId=${response.data.id}`);
-                      } catch (err) {
-                        console.error('Error creating chat:', err);
-                        const errorMessage = err.response?.data?.error || err.message || 'Failed to create chat';
-                        toast.error(errorMessage);
-                        // If chat creation fails, still navigate to chat page
-                        // The user can manually start a conversation
-                        navigate('/chat');
-                      }
-                    }}
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Send Message
-                  </Button>
-                )}
+                {/* Location */}
+                {(() => {
+                  const location = profileData.profile?.location || profileData.location;
+                  console.log('Profile render: location value:', location);
+                  if (location) {
+                    return (
+                      <div className="flex items-center gap-2 text-center lg:text-left w-full">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        <span className="text-sm text-muted-foreground">
+                          {location}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+                
+                {/* Interests */}
+                {(() => {
+                  console.log('Profile render: interestedTags state:', interestedTags, 'length:', interestedTags?.length);
+                  if (interestedTags && Array.isArray(interestedTags) && interestedTags.length > 0) {
+                    return (
+                      <div className="text-center lg:text-left w-full">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Tag className="w-4 h-4 text-primary" />
+                          <Label className="text-sm font-medium text-foreground">Interests</Label>
+                        </div>
+                        <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
+                          {interestedTags.map((tag) => (
+                            <Badge 
+                              key={tag.id || tag.name || Math.random()} 
+                              variant="secondary"
+                              className="bg-secondary/20 text-foreground px-3 py-1"
+                            >
+                              {tag.name || tag.label || `Tag ${tag.id}`}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
 
@@ -423,6 +491,36 @@ export default function Profile() {
                   <Award className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p>No reviews yet</p>
                   <p className="text-xs mt-1">Be the first to review this user!</p>
+                </div>
+              )}
+              
+              {/* Send Message Button */}
+              {user && user.username !== profileData.username && (
+                <div className="mt-4 pt-4 border-t border-primary/20">
+                  <Button 
+                    className="w-full bg-primary hover:bg-primary/90 text-white"
+                    onClick={async () => {
+                      try {
+                        // Create or get existing chat with the profile user
+                        const response = await api.post('/chats/', {
+                          user_id: profileData.id
+                        });
+                        
+                        // Navigate to chat page with the chat ID
+                        navigate(`/chat?chatId=${response.data.id}`);
+                      } catch (err) {
+                        console.error('Error creating chat:', err);
+                        const errorMessage = err.response?.data?.error || err.message || 'Failed to create chat';
+                        toast.error(errorMessage);
+                        // If chat creation fails, still navigate to chat page
+                        // The user can manually start a conversation
+                        navigate('/chat');
+                      }
+                    }}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Send Message
+                  </Button>
                 </div>
               )}
             </div>

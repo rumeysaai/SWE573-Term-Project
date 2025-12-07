@@ -6,7 +6,6 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import api from '../api';
 import {
-  Menu,
   Bell,
   MessageCircle,
   Clock,
@@ -208,9 +207,9 @@ export function Header() {
             Home
           </button>
           <button
-            onClick={() => navigate('/forum')}
+            onClick={() => navigate('/forums')}
             className={`text-sm font-medium transition-colors hover:text-primary ${
-              location.pathname === '/forum' ? 'text-primary' : 'text-gray-700'
+              location.pathname === '/forums' || location.pathname.startsWith('/forum/') ? 'text-primary' : 'text-gray-700'
             }`}
           >
             Forum
@@ -273,7 +272,7 @@ export function Header() {
             )}
           </div>
 
-          {/* Hamburger Menu Button */}
+          {/* Profile Avatar Button (Menu) */}
           <div className="relative">
             <Button
               variant="ghost"
@@ -282,9 +281,21 @@ export function Header() {
                 setShowMenu(!showMenu);
                 setShowProposals(false);
               }}
-              className="hover:bg-primary/10"
+              className="hover:bg-primary/10 p-0 rounded-full"
             >
-              <Menu className="w-6 h-6 text-primary" />
+              {user?.profile?.avatar ? (
+                <img 
+                  src={user.profile.avatar} 
+                  alt={user.username}
+                  className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gray-200 border-2 border-primary/20 flex items-center justify-center">
+                  <span className="text-sm font-medium text-gray-600">
+                    {user?.username?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                </div>
+              )}
             </Button>
 
             {/* Overlay */}
@@ -295,25 +306,10 @@ export function Header() {
               />
             )}
 
-            {/* Hamburger Menu Drawer */}
+            {/* Profile Menu Drawer */}
             {showMenu && (
               <div className="fixed top-0 right-0 h-screen w-80 bg-white border-l border-gray-200 shadow-xl z-50 overflow-y-auto">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex-1">
-                      <h2 className="text-lg font-semibold text-gray-900">The Hive</h2>
-                      <p className="text-xs text-gray-500 mt-1">Community Oriented Platform</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowMenu(false)}
-                      className="hover:bg-gray-100"
-                    >
-                      <X className="w-5 h-5" />
-                    </Button>
-                  </div>
-                  
+                <div className="p-6 pt-4">
                   {/* User Info */}
                   {user && (
                     <div className="mb-6 pb-6 border-b border-gray-200">
@@ -361,7 +357,7 @@ export function Header() {
                     <Button
                       variant="ghost"
                       className="w-full justify-start h-12"
-                      onClick={() => handleMenuClick('/forum')}
+                      onClick={() => handleMenuClick('/forums')}
                     >
                       <MessageSquare className="w-5 h-5 mr-3" />
                       Community Forum
@@ -373,6 +369,14 @@ export function Header() {
                     >
                       <CheckCircle className="w-5 h-5 mr-3" />
                       My Approvals
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start h-12"
+                      onClick={() => handleMenuClick('/chat')}
+                    >
+                      <MessageCircle className="w-5 h-5 mr-3" />
+                      My Messages
                     </Button>
                     {isAdmin && (
                       <Button

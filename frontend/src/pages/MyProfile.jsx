@@ -9,16 +9,15 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown, MessageSquare, Star, Wallet } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, X, Edit2, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown, MessageSquare, Star, Wallet } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import TagSelector from '../components/TagSelector';
 
 export default function MyProfile() {
   const { user, setUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
-  const [newInterest, setNewInterest] = useState('');
-  const [allTags, setAllTags] = useState([]);
   const [showBalanceHistory, setShowBalanceHistory] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -31,6 +30,8 @@ export default function MyProfile() {
   
   const [formData, setFormData] = useState({
     username: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     location: '',
@@ -42,10 +43,16 @@ export default function MyProfile() {
 
   // Local edit states for each section
   const [profilePhotoData, setProfilePhotoData] = useState({ avatar: '' });
-  const [personalInfoData, setPersonalInfoData] = useState({ email: '', phone: '', location: '' });
+  const [personalInfoData, setPersonalInfoData] = useState({ firstName: '', lastName: '', email: '', phone: '', location: '' });
   const [aboutMeData, setAboutMeData] = useState({ bio: '', interested_tags: [] });
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [avatarPreview, setAvatarPreview] = useState(null);
+  
+  // Location autocomplete states
+  const [locationInput, setLocationInput] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -56,6 +63,8 @@ export default function MyProfile() {
         
         const data = {
           username: userData.username || '',
+          firstName: userData.first_name || '',
+          lastName: userData.last_name || '',
           email: userData.email || '',
           phone: userData.profile?.phone || '',
           location: userData.profile?.location || '',
@@ -66,20 +75,77 @@ export default function MyProfile() {
           review_averages: userData.profile?.review_averages || null,
         };
         
+        console.log('MyProfile: Backend response:', {
+          interested_tags_from_backend: data.interested_tags,
+          interested_tags_type: typeof data.interested_tags,
+          is_array: Array.isArray(data.interested_tags),
+          length: data.interested_tags?.length
+        });
+        
         setFormData(data);
         setProfilePhotoData({ avatar: data.avatar });
-        setPersonalInfoData({ email: data.email, phone: data.phone, location: data.location });
-        setAboutMeData({ bio: data.bio, interested_tags: data.interested_tags });
-
-        // Fetch all tags
-        const tagsResponse = await api.get('/tags/');
-        let tagsData = [];
-        if (Array.isArray(tagsResponse.data)) {
-          tagsData = tagsResponse.data;
-        } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
-          tagsData = tagsResponse.data.results || [];
+        setPersonalInfoData({ 
+          firstName: data.firstName, 
+          lastName: data.lastName, 
+          email: data.email, 
+          phone: data.phone, 
+          location: data.location 
+        });
+        setLocationInput(data.location || '');
+        
+        // Convert tag IDs to TagSelector format for display
+        let tagSelectorTags = [];
+        if (data.interested_tags && Array.isArray(data.interested_tags) && data.interested_tags.length > 0) {
+          console.log('MyProfile: Fetching tag details for', data.interested_tags.length, 'tags');
+          // Fetch tag details for each ID
+          try {
+            const tagsResponse = await api.get('/tags/');
+            let allTagsData = [];
+            if (Array.isArray(tagsResponse.data)) {
+              allTagsData = tagsResponse.data;
+            } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
+              allTagsData = tagsResponse.data.results || [];
+            }
+            
+            console.log('MyProfile: Fetched', allTagsData.length, 'total tags from API');
+            console.log('MyProfile: Looking for tag IDs:', data.interested_tags);
+            
+            // Map tag IDs to TagSelector format
+            tagSelectorTags = data.interested_tags.map(tagId => {
+              // Handle both number and string IDs
+              const tag = allTagsData.find(t => {
+                const tId = typeof t.id === 'string' ? parseInt(t.id, 10) : t.id;
+                const searchId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
+                return tId === searchId;
+              });
+              
+              if (tag) {
+                console.log('MyProfile: Found tag:', tag.id, tag.name || tag.label);
+                return {
+                  id: tag.id,
+                  name: tag.name || tag.label,
+                  label: tag.label || tag.name,
+                  wikidata_id: tag.wikidata_id,
+                  description: tag.description,
+                  is_custom: tag.is_custom
+                };
+              } else {
+                console.warn('MyProfile: Tag not found for ID:', tagId);
+              }
+              return null;
+            }).filter(Boolean);
+            
+            console.log('MyProfile: Converted to TagSelector format:', tagSelectorTags.length, 'tags', tagSelectorTags);
+          } catch (error) {
+            console.error('Error fetching tags for display:', error);
+          }
+        } else {
+          console.log('MyProfile: No interested_tags or empty array');
         }
-        setAllTags(tagsData);
+        
+        console.log('MyProfile: Setting aboutMeData with', tagSelectorTags.length, 'tags');
+        setAboutMeData({ bio: data.bio, interested_tags: tagSelectorTags });
+        console.log('MyProfile: aboutMeData set, should see tags in About Me section');
       } catch (error) {
         console.error('Error fetching profile:', error);
         toast.error('Failed to load profile');
@@ -90,6 +156,31 @@ export default function MyProfile() {
 
     fetchProfile();
   }, []);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showSuggestions && !event.target.closest('.location-suggestions-container')) {
+        setShowSuggestions(false);
+      }
+    };
+
+    if (showSuggestions) {
+      document.addEventListener('click', handleClickOutside);
+      return () => {
+        document.removeEventListener('click', handleClickOutside);
+      };
+    }
+  }, [showSuggestions]);
+
+  // Sync locationInput when editing mode opens
+  useEffect(() => {
+    if (editingPersonalInfo) {
+      setLocationInput(personalInfoData.location || '');
+      setShowSuggestions(false);
+      setLocationSuggestions([]);
+    }
+  }, [editingPersonalInfo]);
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
@@ -160,6 +251,8 @@ export default function MyProfile() {
     try {
       setSaving(prev => ({ ...prev, personalInfo: true }));
       const response = await api.put('/users/me/', {
+        first_name: personalInfoData.firstName,
+        last_name: personalInfoData.lastName,
         email: personalInfoData.email,
         phone: personalInfoData.phone,
         location: personalInfoData.location,
@@ -168,6 +261,8 @@ export default function MyProfile() {
       setUser(response.data);
       setFormData(prev => ({ 
         ...prev, 
+        firstName: personalInfoData.firstName,
+        lastName: personalInfoData.lastName,
         email: personalInfoData.email,
         phone: personalInfoData.phone,
         location: personalInfoData.location,
@@ -182,20 +277,123 @@ export default function MyProfile() {
     }
   };
 
+  // Location autocomplete functions
+  const searchLocation = async (query) => {
+    if (query.length < 3) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setLocationLoading(true);
+    try {
+      // OpenStreetMap Nominatim API - Global search 
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en`
+      );
+      const data = await response.json();
+      
+      setLocationSuggestions(data);
+      setShowSuggestions(true);
+    } catch (err) {
+      console.error("Location search error:", err);
+      setLocationSuggestions([]);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const handleLocationInputChange = (e) => {
+    const value = e.target.value;
+    setLocationInput(value);
+    setPersonalInfoData(prev => ({ ...prev, location: value }));
+    
+    // Debounce için timeout
+    const timeoutId = setTimeout(() => {
+      searchLocation(value);
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
+  };
+
+  const handleLocationSelect = (suggestion) => {
+    const locationName = suggestion.display_name;
+    setLocationInput(locationName);
+    setPersonalInfoData(prev => ({ ...prev, location: locationName }));
+    setShowSuggestions(false);
+    setLocationSuggestions([]);
+  };
+
   const handleSaveAboutMe = async () => {
     try {
       setSaving(prev => ({ ...prev, aboutMe: true }));
+      
+      // Convert TagSelector format to backend format
+      const tagsForBackend = aboutMeData.interested_tags.map(tag => {
+        // If tag has ID, send as ID or object with id
+        if (tag.id) {
+          return tag.id; // Backend accepts integer IDs
+        }
+        // If it's a new custom tag, send as object with name
+        return {
+          name: tag.name || tag.label,
+          label: tag.label || tag.name,
+          wikidata_id: tag.wikidata_id,
+          description: tag.description,
+          is_custom: tag.is_custom || true
+        };
+      });
+      
       const response = await api.put('/users/me/', {
         bio: aboutMeData.bio,
-        interested_tags: aboutMeData.interested_tags,
+        interested_tags: tagsForBackend,
       });
 
+      // Update user context
       setUser(response.data);
+      
+      // Update formData with tag IDs from response
+      const updatedInterestedTags = response.data?.profile?.interested_tags || [];
       setFormData(prev => ({ 
         ...prev, 
-        bio: aboutMeData.bio,
-        interested_tags: aboutMeData.interested_tags,
+        bio: aboutMeData.bio, 
+        interested_tags: updatedInterestedTags,
       }));
+      
+      // Update aboutMeData with TagSelector format for display
+      if (updatedInterestedTags.length > 0) {
+        try {
+          const tagsResponse = await api.get('/tags/');
+          let allTagsData = [];
+          if (Array.isArray(tagsResponse.data)) {
+            allTagsData = tagsResponse.data;
+          } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
+            allTagsData = tagsResponse.data.results || [];
+          }
+          
+          const tagSelectorTags = updatedInterestedTags.map(tagId => {
+            const tag = allTagsData.find(t => t.id === tagId);
+            if (tag) {
+              return {
+                id: tag.id,
+                name: tag.name || tag.label,
+                label: tag.label || tag.name,
+                wikidata_id: tag.wikidata_id,
+                description: tag.description,
+                is_custom: tag.is_custom
+              };
+            }
+            return null;
+          }).filter(Boolean);
+          
+          setAboutMeData(prev => ({ ...prev, interested_tags: tagSelectorTags }));
+        } catch (error) {
+          console.error('Error refreshing tags after save:', error);
+        }
+      } else {
+        setAboutMeData(prev => ({ ...prev, interested_tags: [] }));
+      }
+      
       setEditingAboutMe(false);
       toast.success('About me section updated successfully');
     } catch (error) {
@@ -230,30 +428,6 @@ export default function MyProfile() {
     }
   };
 
-  const handleAddInterest = () => {
-    const tag = allTags.find(t => t.name.toLowerCase() === newInterest.trim().toLowerCase());
-    if (tag && !aboutMeData.interested_tags.includes(tag.id)) {
-      setAboutMeData(prev => ({
-        ...prev,
-        interested_tags: [...prev.interested_tags, tag.id]
-      }));
-      setNewInterest('');
-    } else if (newInterest.trim()) {
-      toast.error('Tag not found. Please select from existing tags.');
-    }
-  };
-
-  const handleRemoveInterest = (tagId) => {
-    setAboutMeData(prev => ({
-      ...prev,
-      interested_tags: prev.interested_tags.filter(id => id !== tagId)
-    }));
-  };
-
-  const getTagNameById = (tagId) => {
-    const tag = allTags.find(t => t.id === tagId);
-    return tag ? tag.name : '';
-  };
 
   const fetchBalanceHistory = async () => {
     try {
@@ -885,6 +1059,8 @@ export default function MyProfile() {
                 size="sm"
                 onClick={() => {
                   setPersonalInfoData({ 
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
                     email: formData.email, 
                     phone: formData.phone, 
                     location: formData.location 
@@ -903,6 +1079,8 @@ export default function MyProfile() {
                   onClick={() => {
                     setEditingPersonalInfo(false);
                     setPersonalInfoData({ 
+                      firstName: formData.firstName,
+                      lastName: formData.lastName,
                       email: formData.email, 
                       phone: formData.phone, 
                       location: formData.location 
@@ -940,6 +1118,46 @@ export default function MyProfile() {
               <div className="md:col-span-2">
                 <p className="py-2">{formData.username}</p>
                 <p className="text-sm text-slate-500">Username cannot be changed</p>
+              </div>
+            </div>
+
+            {/* First Name and Last Name */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+              <Label className="flex items-center gap-2 md:pt-2">
+                <User className="w-4 h-4 text-muted-foreground" />
+                Name
+              </Label>
+              <div className="md:col-span-2">
+                {editingPersonalInfo ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName" className="text-sm">First Name</Label>
+                      <Input
+                        id="firstName"
+                        type="text"
+                        value={personalInfoData.firstName}
+                        onChange={(e) => setPersonalInfoData(prev => ({ ...prev, firstName: e.target.value }))}
+                        placeholder="Enter your first name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName" className="text-sm">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        type="text"
+                        value={personalInfoData.lastName}
+                        onChange={(e) => setPersonalInfoData(prev => ({ ...prev, lastName: e.target.value }))}
+                        placeholder="Enter your last name"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="py-2">
+                    {formData.firstName || formData.lastName 
+                      ? `${formData.firstName || ''} ${formData.lastName || ''}`.trim()
+                      : 'Not specified'}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -991,11 +1209,51 @@ export default function MyProfile() {
               </Label>
               <div className="md:col-span-2">
                 {editingPersonalInfo ? (
-                  <Input
-                    value={personalInfoData.location}
-                    onChange={(e) => setPersonalInfoData(prev => ({ ...prev, location: e.target.value }))}
-                    placeholder="Enter your location"
-                  />
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        placeholder="Type location (e.g., Kadıköy, Beşiktaş...)"
+                        value={locationInput}
+                        onChange={handleLocationInputChange}
+                        onFocus={() => {
+                          if (locationSuggestions.length > 0) {
+                            setShowSuggestions(true);
+                          }
+                        }}
+                        onBlur={() => {
+                          // Delay to allow click on suggestion
+                          setTimeout(() => setShowSuggestions(false), 200);
+                        }}
+                        className="h-10 text-sm border-primary/20"
+                      />
+                      {locationLoading && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                        </div>
+                      )}
+                      
+                      {/* Suggestions Dropdown */}
+                      {showSuggestions && locationSuggestions.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                          {locationSuggestions.map((suggestion, index) => (
+                            <div
+                              key={index}
+                              onClick={() => handleLocationSelect(suggestion)}
+                              className="px-4 py-2 hover:bg-primary/5 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            >
+                              <div className="font-medium text-sm text-gray-900">
+                                {suggestion.display_name.split(',')[0]}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {suggestion.display_name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <p className="py-2">{formData.location || 'Not specified'}</p>
                 )}
@@ -1012,10 +1270,41 @@ export default function MyProfile() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => {
+                onClick={async () => {
+                  // Load tag details when entering edit mode
+                  let tagSelectorTags = [];
+                  if (formData.interested_tags && Array.isArray(formData.interested_tags) && formData.interested_tags.length > 0) {
+                    try {
+                      const tagsResponse = await api.get('/tags/');
+                      let allTagsData = [];
+                      if (Array.isArray(tagsResponse.data)) {
+                        allTagsData = tagsResponse.data;
+                      } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
+                        allTagsData = tagsResponse.data.results || [];
+                      }
+                      
+                      tagSelectorTags = formData.interested_tags.map(tagId => {
+                        const tag = allTagsData.find(t => t.id === tagId);
+                        if (tag) {
+                          return {
+                            id: tag.id,
+                            name: tag.name || tag.label,
+                            label: tag.label || tag.name,
+                            wikidata_id: tag.wikidata_id,
+                            description: tag.description,
+                            is_custom: tag.is_custom
+                          };
+                        }
+                        return null;
+                      }).filter(Boolean);
+                    } catch (error) {
+                      console.error('Error loading tags for edit:', error);
+                    }
+                  }
+                  
                   setAboutMeData({ 
                     bio: formData.bio, 
-                    interested_tags: formData.interested_tags 
+                    interested_tags: tagSelectorTags
                   });
                   setEditingAboutMe(true);
                 }}
@@ -1028,11 +1317,48 @@ export default function MyProfile() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => {
+                  onClick={async () => {
+                    // Reload tag details when canceling
+                    let tagSelectorTags = [];
+                    if (formData.interested_tags && Array.isArray(formData.interested_tags) && formData.interested_tags.length > 0) {
+                      try {
+                        const tagsResponse = await api.get('/tags/');
+                        let allTagsData = [];
+                        if (Array.isArray(tagsResponse.data)) {
+                          allTagsData = tagsResponse.data;
+                        } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
+                          allTagsData = tagsResponse.data.results || [];
+                        }
+                        
+                        tagSelectorTags = formData.interested_tags.map(tagId => {
+                          // Handle both number and string IDs
+                          const tag = allTagsData.find(t => {
+                            const tId = typeof t.id === 'string' ? parseInt(t.id, 10) : t.id;
+                            const searchId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
+                            return tId === searchId;
+                          });
+                          if (tag) {
+                            return {
+                              id: tag.id,
+                              name: tag.name || tag.label,
+                              label: tag.label || tag.name,
+                              wikidata_id: tag.wikidata_id,
+                              description: tag.description,
+                              is_custom: tag.is_custom
+                            };
+                          }
+                          console.warn('Tag not found for ID:', tagId);
+                          return null;
+                        }).filter(Boolean);
+                      } catch (error) {
+                        console.error('Error loading tags for cancel:', error);
+                      }
+                    }
+                    
                     setEditingAboutMe(false);
                     setAboutMeData({ 
                       bio: formData.bio, 
-                      interested_tags: formData.interested_tags 
+                      interested_tags: tagSelectorTags
                     });
                   }}
                   disabled={saving.aboutMe}
@@ -1078,87 +1404,49 @@ export default function MyProfile() {
             <div>
               <Label className="mb-2 block">Interests</Label>
               
-              {/* Display existing interests as tags */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                {formData.interested_tags.map(tagId => {
-                  const tagName = getTagNameById(tagId);
-                  if (!tagName) return null;
-                  return (
-                    <Badge 
-                      key={tagId} 
-                      variant="secondary"
-                      className="bg-secondary/20 text-foreground px-3 py-1 hover:bg-secondary/30 transition-colors"
-                    >
-                      {tagName}
-                      {editingAboutMe && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveInterest(tagId)}
-                          className="ml-2 hover:text-destructive transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </Badge>
-                  );
-                })}
-                {formData.interested_tags.length === 0 && (
-                  <p className="text-slate-500 text-sm">No interests added yet</p>
-                )}
-              </div>
-
-              {/* Add new interest input (only in edit mode) */}
-              {editingAboutMe && (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <Input
-                      value={newInterest}
-                      onChange={(e) => setNewInterest(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddInterest();
-                        }
-                      }}
-                      placeholder="Type tag name (from existing tags)"
-                      className="flex-1"
-                      list="tags-list"
-                    />
-                    <datalist id="tags-list">
-                      {allTags.map(tag => (
-                        <option key={tag.id} value={tag.name} />
-                      ))}
-                    </datalist>
-                    <Button
-                      type="button"
-                      onClick={handleAddInterest}
-                      disabled={!newInterest.trim()}
-                      size="sm"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add
-                    </Button>
-                  </div>
-                  <p className="text-sm text-slate-500">
-                    Select from existing tags or type tag name
-                  </p>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {allTags.filter(tag => !aboutMeData.interested_tags.includes(tag.id)).map(tag => (
-                      <Badge
-                        key={tag.id}
-                        variant="outline"
-                        className="cursor-pointer hover:bg-secondary/20"
-                        onClick={() => {
-                          setAboutMeData(prev => ({
-                            ...prev,
-                            interested_tags: [...prev.interested_tags, tag.id]
-                          }));
-                        }}
-                      >
-                        {tag.name}
-                      </Badge>
-                    ))}
-                  </div>
+              {editingAboutMe ? (
+                <div>
+                  <TagSelector
+                    value={aboutMeData.interested_tags || []}
+                    onChange={(tags) => {
+                      console.log('MyProfile: TagSelector onChange called with', tags?.length || 0, 'tags');
+                      setAboutMeData(prev => ({
+                        ...prev,
+                        interested_tags: tags || []
+                      }));
+                    }}
+                    placeholder="Search and select your interests..."
+                    isMulti={true}
+                    showAllTagsOnOpen={true}
+                  />
+                  {aboutMeData.interested_tags && aboutMeData.interested_tags.length > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {aboutMeData.interested_tags.length} tag(s) selected
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {(() => {
+                    console.log('MyProfile: Rendering tags display. aboutMeData.interested_tags:', aboutMeData.interested_tags);
+                    if (aboutMeData.interested_tags && Array.isArray(aboutMeData.interested_tags) && aboutMeData.interested_tags.length > 0) {
+                      return aboutMeData.interested_tags.map((tag, index) => {
+                        console.log('MyProfile: Rendering tag:', tag);
+                        return (
+                          <Badge 
+                            key={tag.id || index} 
+                            variant="secondary"
+                            className="bg-secondary/20 text-foreground px-3 py-1"
+                          >
+                            {tag.name || tag.label || `Tag ${tag.id}`}
+                          </Badge>
+                        );
+                      });
+                    } else {
+                      console.log('MyProfile: No tags to display');
+                      return <p className="text-slate-500 text-sm">No interests added yet</p>;
+                    }
+                  })()}
                 </div>
               )}
             </div>
