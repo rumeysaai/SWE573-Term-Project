@@ -284,6 +284,13 @@ class UserProfileView(APIView):
             # Add first_name and last_name to response (public data)
             user_data['first_name'] = user.first_name
             user_data['last_name'] = user.last_name
+            
+            # Fetch reviews received by this user
+            from .models import Review
+            reviews = Review.objects.filter(reviewed_user=user).select_related('reviewer', 'proposal', 'proposal__post').order_by('-created_at')
+            reviews_data = ReviewSerializer(reviews, many=True).data
+            user_data['reviews'] = reviews_data
+            
             # Ensure profile data structure is correct
             if 'profile' in user_data:
                 # Profile data is already included from UserSerializer with review_averages

@@ -397,6 +397,8 @@ class Review(models.Model):
         help_text="Rating from 1 to 5"
     )
     
+    comment = models.TextField(blank=True, null=True, help_text="Optional comment about the reviewed user")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -38,6 +38,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [interestedTags, setInterestedTags] = useState([]);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -58,6 +59,11 @@ export default function Profile() {
         setProfileData(profileResponse.data);
         console.log('Profile: Full profile data from backend:', profileResponse.data);
         console.log('Profile: Location from backend:', profileResponse.data?.profile?.location || profileResponse.data?.location);
+        
+        // Set reviews if available
+        if (profileResponse.data.reviews) {
+          setReviews(profileResponse.data.reviews);
+        }
         
         // Fetch interested tags if available
         const interestedTagIds = profileResponse.data?.profile?.interested_tags || [];
@@ -555,6 +561,10 @@ export default function Profile() {
                 <Award className="w-4 h-4 mr-2" />
                 The Hive History
               </SimpleTabsTrigger>
+              <SimpleTabsTrigger value="comments">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Comments ({reviews.length})
+              </SimpleTabsTrigger>
             </SimpleTabsList>
 
             <SimpleTabsContent value="offers" className="space-y-3 mt-6">
@@ -567,7 +577,7 @@ export default function Profile() {
                 offerPosts.map((post) => (
                   <div
                     key={post.id}
-                    className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
+                    className="border-2 border-primary/40 bg-white rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
                     onClick={() => navigate(`/post-details/${post.id}`)}
                   >
                     <div className="flex items-start justify-between">
@@ -625,7 +635,7 @@ export default function Profile() {
                 needPosts.map((post) => (
                   <div
                     key={post.id}
-                    className="border-2 border-accent/60 bg-accent/10 rounded-xl p-4 space-y-2 hover:border-accent/80 transition-colors cursor-pointer"
+                    className="border-2 border-orange-500 bg-white rounded-xl p-4 space-y-2 hover:border-orange-600 transition-colors cursor-pointer"
                     onClick={() => navigate(`/post-details/${post.id}`)}
                   >
                     <div className="flex items-start justify-between">
@@ -685,27 +695,27 @@ export default function Profile() {
                   {completedJobs.map((job) => {
                   const post = job.post;
                   return (
-                    <div
+                      <div
                       key={job.proposalId}
-                      className="border-2 border-green-200 bg-green-50 rounded-xl p-4 space-y-2 hover:border-green-300 transition-colors cursor-pointer"
+                      className="border-2 border-green-500 bg-white rounded-xl p-4 space-y-2 hover:border-green-600 transition-colors cursor-pointer"
                       onClick={() => navigate(`/post-details/${post.id}`)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <p className="text-green-800 font-medium">{post.title}</p>
-                          <p className="text-sm text-green-700 mt-1">
+                          <p className="text-green-700 font-medium">{post.title}</p>
+                          <p className="text-sm text-gray-600 mt-1">
                             {job.updated_at 
                               ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
                               : job.proposed_date
                               ? formatDistanceToNow(new Date(job.proposed_date), { addSuffix: true })
                               : 'Recently'}
                           </p>
-                          {post.description && (
-                            <p className="text-sm text-green-800 mt-2 line-clamp-2">
-                              {post.description}
-                            </p>
-                          )}
-                          <div className="mt-2 flex items-center gap-4 text-xs text-green-700">
+                            {post.description && (
+                              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                                {post.description}
+                              </p>
+                            )}
+                          <div className="mt-2 flex items-center gap-4 text-xs text-green-600">
                             <span className="flex items-center gap-1 font-bold">
                               <Award className="w-3 h-3" />
                               Completed
@@ -739,7 +749,7 @@ export default function Profile() {
                         </div>
                       )}
                       {post.location && (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
+                        <div className="flex items-center gap-1 text-xs text-gray-600">
                           <MapPin className="w-3 h-3" />
                           <span>{post.location}</span>
                         </div>
@@ -754,13 +764,13 @@ export default function Profile() {
                     return (
                       <div
                         key={`cancelled-${job.proposalId}`}
-                        className="border-2 border-red-200 bg-red-50 rounded-xl p-4 space-y-2 hover:border-red-300 transition-colors cursor-pointer"
+                        className="border-2 border-red-500 bg-white rounded-xl p-4 space-y-2 hover:border-red-600 transition-colors cursor-pointer"
                         onClick={() => navigate(`/post-details/${post.id}`)}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <p className="text-red-900 font-medium">{post.title}</p>
-                            <p className="text-sm text-red-700 mt-1">
+                            <p className="text-red-700 font-medium">{post.title}</p>
+                            <p className="text-sm text-gray-600 mt-1">
                               {job.updated_at 
                                 ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
                                 : job.proposed_date
@@ -768,11 +778,11 @@ export default function Profile() {
                                 : 'Recently'}
                             </p>
                             {post.description && (
-                              <p className="text-sm text-red-800 mt-2 line-clamp-2">
+                              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
                                 {post.description}
                               </p>
                             )}
-                            <div className="mt-2 flex items-center gap-4 text-xs text-red-700">
+                            <div className="mt-2 flex items-center gap-4 text-xs text-red-600">
                               <span className="flex items-center gap-1 font-bold">
                                 <XCircle className="w-3 h-3" />
                                 {job.cancellation_reason === 'not_showed_up' 
@@ -817,7 +827,7 @@ export default function Profile() {
                           </div>
                         )}
                         {post.location && (
-                          <div className="flex items-center gap-1 text-xs text-red-600">
+                          <div className="flex items-center gap-1 text-xs text-gray-600">
                             <MapPin className="w-3 h-3" />
                             <span>{post.location}</span>
                           </div>
@@ -826,6 +836,100 @@ export default function Profile() {
                     );
                   })}
                 </>
+              )}
+            </SimpleTabsContent>
+
+            <SimpleTabsContent value="comments" className="space-y-4 mt-6">
+              {reviews.length === 0 ? (
+                <Card className="border-primary/20">
+                  <CardContent className="pt-6 text-center text-muted-foreground">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No comments yet</p>
+                    <p className="text-xs mt-1">This user hasn't received any reviews yet.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                reviews.map((review) => (
+                  <Card key={review.id} className="border-primary/20">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback>
+                              {review.reviewer_username?.substring(0, 2).toUpperCase() || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <CardTitle className="text-base">
+                              {review.reviewer_username || 'Unknown User'}
+                            </CardTitle>
+                            <p className="text-xs text-muted-foreground">
+                              {review.created_at ? formatDistanceToNow(new Date(review.created_at), { addSuffix: true }) : 'Recently'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm font-semibold">
+                            {review.work_quality ? ((review.friendliness + review.time_management + review.reliability + review.communication + review.work_quality) / 5).toFixed(1) : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {review.post_title && (
+                        <div className="mb-4 pb-4 border-b border-gray-200">
+                          <p className="text-sm text-muted-foreground mb-1">Post:</p>
+                          <p className="text-base font-medium text-primary">
+                            {review.post_title}
+                          </p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                        <div className="flex items-center gap-2">
+                          <Smile className="w-4 h-4 text-primary" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Friendliness</p>
+                            <p className="text-sm font-semibold">{review.friendliness}/5</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Timer className="w-4 h-4 text-primary" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Time Management</p>
+                            <p className="text-sm font-semibold">{review.time_management}/5</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-4 h-4 text-primary" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Reliability</p>
+                            <p className="text-sm font-semibold">{review.reliability}/5</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-primary" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Communication</p>
+                            <p className="text-sm font-semibold">{review.communication}/5</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Award className="w-4 h-4 text-primary" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Work Quality</p>
+                            <p className="text-sm font-semibold">{review.work_quality}/5</p>
+                          </div>
+                        </div>
+                      </div>
+                      {review.comment && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{review.comment}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))
               )}
             </SimpleTabsContent>
           </SimpleTabs>

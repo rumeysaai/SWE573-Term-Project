@@ -461,6 +461,8 @@ class ReviewSerializer(serializers.ModelSerializer):
     reviewed_user_id = serializers.IntegerField(source='reviewed_user.id', read_only=True)
     reviewed_user_username = serializers.CharField(source='reviewed_user.username', read_only=True)
     proposal_id = serializers.IntegerField(source='proposal.id', read_only=True)
+    post_title = serializers.CharField(source='proposal.post.title', read_only=True)
+    post_id = serializers.IntegerField(source='proposal.post.id', read_only=True)
 
     class Meta:
         model = Review
@@ -468,6 +470,8 @@ class ReviewSerializer(serializers.ModelSerializer):
             'id',
             'proposal',
             'proposal_id',
+            'post_id',
+            'post_title',
             'reviewer',
             'reviewer_id',
             'reviewer_username',
@@ -479,6 +483,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             'reliability',
             'communication',
             'work_quality',
+            'comment',
             'created_at',
             'updated_at',
         ]
