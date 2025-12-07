@@ -21,6 +21,7 @@ import Admin from './pages/Admin';
 import HowTo from './pages/HowTo';
 import TimeBank from './pages/TimeBank';
 import About from './pages/About';
+import Chat from './pages/Chat';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 
@@ -206,6 +207,10 @@ export default function App() {
               <Route
                 path="/forum/:topicId"
                 element={<ProtectedRoute><ForumDetails /></ProtectedRoute>}
+              />
+              <Route
+                path="/chat"
+                element={<ProtectedRoute><Chat /></ProtectedRoute>}
               />
               <Route
                 path="/how-to"

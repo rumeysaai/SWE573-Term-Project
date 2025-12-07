@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Label } from "../components/ui/label";
@@ -12,7 +13,6 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "../App";
 import { formatDistanceToNow } from "date-fns";
 import {
-  User,
   Leaf,
   MapPin,
   Shield,
@@ -256,55 +256,69 @@ export default function Profile() {
       {/* Profile Info */}
       <Card className="border-primary/20 shadow-md">
         <CardHeader className="bg-gradient-to-r from-primary/5 to-secondary/20">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-primary-foreground">
-              <User className="w-6 h-6" />
-            </div>
-            <CardTitle className="text-primary" style={{ fontWeight: 400 }}>Profile</CardTitle>
-          </div>
+          <CardTitle className="text-primary" style={{ fontWeight: 400 }}>
+            {(profileData.first_name || profileData.last_name) 
+              ? [profileData.first_name, profileData.last_name]
+                  .filter(Boolean)
+                  .map(name => name.charAt(0).toUpperCase() + name.slice(1).toLowerCase())
+                  .join(' ')
+              : 'Profile'}
+          </CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
           {/* User Photo, Basic Info & Rating Categories */}
           <div className="flex flex-col lg:flex-row lg:items-stretch items-start gap-6">
             {/* Left Side: Avatar & Basic Info */}
-            <div className="flex items-start gap-4 flex-1 w-full">
-              <Avatar className="w-24 h-24 border-4 border-primary/20 shadow-md">
+            <div className="flex flex-col items-center lg:items-start flex-1 w-full gap-4">
+              {/* Avatar */}
+              <Avatar className="w-32 h-32 lg:w-40 lg:h-40 border-4 border-primary/20 shadow-md">
                 <AvatarImage
                   src={profileData.profile?.avatar || profileData.avatar || "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"}
                   alt={profileData.username}
                 />
-                <AvatarFallback className="bg-primary text-primary-foreground">
+                <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
                   {profileData.username.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    {(profileData.first_name || profileData.last_name) && (
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {[profileData.first_name, profileData.last_name].filter(Boolean).join(' ') || ''}
-                      </h3>
-                    )}
-                    <Label>{profileData.username}</Label>
-                    {(profileData.profile?.bio || profileData.bio) && (
-                      <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                        {profileData.profile?.bio || profileData.bio}
-                      </p>
-                    )}
+              
+              {/* Username, About Me and Send Message Button */}
+              <div className="flex flex-col items-center lg:items-start gap-3 w-full">
+                <Label className="text-base">{profileData.username}</Label>
+                
+                {(profileData.profile?.bio || profileData.bio) && (
+                  <div className="text-center lg:text-left w-full">
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {profileData.profile?.bio || profileData.bio}
+                    </p>
                   </div>
-                  {user && user.username !== profileData.username && (
-                    <Button 
-                      className="mt-4 bg-primary hover:bg-primary/90 text-white"
-                      onClick={() => {
-                        // TODO: Navigate to messaging page or open message dialog
-                        console.log('Send message to', profileData.username);
-                      }}
-                    >
-                      <MessageCircle className="w-4 h-4 mr-2" />
-                      Send Message
-                    </Button>
-                  )}
-                </div>
+                )}
+                
+                {user && user.username !== profileData.username && (
+                  <Button 
+                    className="bg-primary hover:bg-primary/90 text-white"
+                    onClick={async () => {
+                      try {
+                        // Create or get existing chat with the profile user
+                        const response = await api.post('/chats/', {
+                          user_id: profileData.id
+                        });
+                        
+                        // Navigate to chat page with the chat ID
+                        navigate(`/chat?chatId=${response.data.id}`);
+                      } catch (err) {
+                        console.error('Error creating chat:', err);
+                        const errorMessage = err.response?.data?.error || err.message || 'Failed to create chat';
+                        toast.error(errorMessage);
+                        // If chat creation fails, still navigate to chat page
+                        // The user can manually start a conversation
+                        navigate('/chat');
+                      }
+                    }}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Send Message
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -316,10 +330,10 @@ export default function Profile() {
                   Community Ratings
                 </h4>
                 {profileData.profile?.review_averages?.total_reviews > 0 && (
-                  <div className="flex items-center gap-1 text-xs text-primary">
-                    <Star className="w-3 h-3 fill-primary" />
-                    <span>{profileData.profile.review_averages.overall.toFixed(1)}/5</span>
-                    <span className="text-muted-foreground">({profileData.profile.review_averages.total_reviews})</span>
+                  <div className="flex items-center gap-1 text-primary">
+                    <Star className="w-4 h-4 fill-primary" />
+                    <span className="text-lg font-bold">{profileData.profile.review_averages.overall.toFixed(1)}/5</span>
+                    <span className="text-xs text-muted-foreground">({profileData.profile.review_averages.total_reviews})</span>
                   </div>
                 )}
               </div>
@@ -332,7 +346,7 @@ export default function Profile() {
                         <Star className="w-3 h-3 text-primary" />
                         Overall Rating
                       </Label>
-                      <span className="text-xs text-primary">
+                      <span className="text-sm font-semibold text-primary">
                         {profileData.profile.review_averages.overall.toFixed(1)}/5
                       </span>
                     </div>
@@ -575,13 +589,13 @@ export default function Profile() {
                   return (
                     <div
                       key={job.proposalId}
-                      className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
+                      className="border-2 border-green-200 bg-green-50 rounded-xl p-4 space-y-2 hover:border-green-300 transition-colors cursor-pointer"
                       onClick={() => navigate(`/post-details/${post.id}`)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <p className="text-primary font-medium">{post.title}</p>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="text-green-800 font-medium">{post.title}</p>
+                          <p className="text-sm text-green-700 mt-1">
                             {job.updated_at 
                               ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
                               : job.proposed_date
@@ -589,12 +603,12 @@ export default function Profile() {
                               : 'Recently'}
                           </p>
                           {post.description && (
-                            <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                            <p className="text-sm text-green-800 mt-2 line-clamp-2">
                               {post.description}
                             </p>
                           )}
-                          <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
+                          <div className="mt-2 flex items-center gap-4 text-xs text-green-700">
+                            <span className="flex items-center gap-1 font-bold">
                               <Award className="w-3 h-3" />
                               Completed
                             </span>
@@ -607,7 +621,7 @@ export default function Profile() {
                         {post.duration && (
                           <Badge
                             variant="outline"
-                            className="border-primary text-primary bg-primary/10"
+                            className="border-green-300 text-green-700 bg-green-100"
                           >
                             {post.duration}
                           </Badge>
@@ -627,7 +641,7 @@ export default function Profile() {
                         </div>
                       )}
                       {post.location && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1 text-xs text-green-600">
                           <MapPin className="w-3 h-3" />
                           <span>{post.location}</span>
                         </div>
@@ -661,7 +675,7 @@ export default function Profile() {
                               </p>
                             )}
                             <div className="mt-2 flex items-center gap-4 text-xs text-red-700">
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 font-bold">
                                 <XCircle className="w-3 h-3" />
                                 {job.cancellation_reason === 'not_showed_up' 
                                   ? 'Cancelled - Transferred'

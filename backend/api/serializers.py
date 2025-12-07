@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
-from .models import Profile, Tag, Post, Comment, Proposal, Review
+from .models import Profile, Tag, Post, Comment, Proposal, Review, Chat, Message
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -346,3 +346,93 @@ class ReviewSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'reviewer', 'reviewed_user', 'created_at', 'updated_at']
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    sender_id = serializers.IntegerField(source='sender.id', read_only=True)
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+
+    class Meta:
+        model = Message
+        fields = [
+            'id',
+            'chat',
+            'sender',
+            'sender_id',
+            'sender_username',
+            'content',
+            'is_read',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'sender', 'created_at']
+
+
+class ChatListSerializer(serializers.ModelSerializer):
+    """Serializer for chat list with other user info and last message"""
+    other_user = serializers.SerializerMethodField()
+    other_user_avatar = serializers.SerializerMethodField()
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
+    def get_other_user(self, obj):
+        """Get the other participant's username (not the current user)"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        
+        current_user = request.user
+        if obj.participant1 == current_user:
+            return obj.participant2.username
+        else:
+            return obj.participant1.username
+
+    def get_other_user_avatar(self, obj):
+        """Get the other participant's avatar"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        
+        current_user = request.user
+        other_user = obj.participant2 if obj.participant1 == current_user else obj.participant1
+        if hasattr(other_user, 'profile') and other_user.profile.avatar:
+            return other_user.profile.avatar
+        return None
+
+    def get_last_message(self, obj):
+        """Get the last message in this chat"""
+        last_msg = obj.messages.last()  # Get last message due to ordering
+        if last_msg:
+            return {
+                'content': last_msg.content[:50] + '...' if len(last_msg.content) > 50 else last_msg.content,
+                'created_at': last_msg.created_at,
+                'sender_username': last_msg.sender.username,
+            }
+        return None
+
+    def get_unread_count(self, obj):
+        """Get count of unread messages for current user in this chat"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return 0
+        
+        current_user = request.user
+        # Count unread messages where sender is NOT the current user
+        unread_count = obj.messages.filter(
+            is_read=False
+        ).exclude(sender=current_user).count()
+        return unread_count
+
+    class Meta:
+        model = Chat
+        fields = [
+            'id',
+            'participant1',
+            'participant2',
+            'other_user',
+            'other_user_avatar',
+            'last_message',
+            'unread_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'participant1', 'participant2', 'created_at', 'updated_at']

@@ -7,10 +7,11 @@ from rest_framework import generics, permissions, viewsets, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 
-from .models import Post, Tag, Profile, Comment, Proposal, Review, Job
+from .models import Post, Tag, Profile, Comment, Proposal, Review, Job, Chat, Message
 from django.contrib.auth.models import User
 from .serializers import (RegisterSerializer, 
     UserSerializer, 
@@ -19,7 +20,11 @@ from .serializers import (RegisterSerializer,
     ProfileSerializer,
     CommentSerializer,
     ProposalSerializer,
-    ReviewSerializer)
+    ReviewSerializer,
+    ChatListSerializer,
+    MessageSerializer)
+from django.db.models import Q
+from django.utils import timezone
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -458,3 +463,168 @@ class ReviewViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You are not authorized to create a review for this proposal.")
         
         serializer.save(reviewer=self.request.user, reviewed_user=reviewed_user)
+
+
+class ChatViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Chat model
+    GET /api/chats/ - List all chats for current user (ordered by updated_at descending)
+    POST /api/chats/ - Create or get existing chat with user_id
+    """
+    serializer_class = ChatListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Get all chats where current user is participant1 or participant2"""
+        user = self.request.user
+        return Chat.objects.filter(
+            Q(participant1=user) | Q(participant2=user)
+        ).order_by('-updated_at')
+
+    def get_serializer_context(self):
+        """Add request to serializer context for ChatListSerializer"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+    def create(self, request, *args, **kwargs):
+        """Create or get existing chat with user_id"""
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            other_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if other_user == request.user:
+            return Response(
+                {'error': 'Cannot create chat with yourself.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if chat already exists (in either direction)
+        chat = Chat.objects.filter(
+            (Q(participant1=request.user) & Q(participant2=other_user)) |
+            (Q(participant1=other_user) & Q(participant2=request.user))
+        ).first()
+        
+        if chat:
+            # Chat exists, return it
+            serializer = self.get_serializer(chat)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        # Create new chat (always put smaller user_id as participant1 for consistency)
+        if request.user.id < other_user.id:
+            chat = Chat.objects.create(
+                participant1=request.user,
+                participant2=other_user
+            )
+        else:
+            chat = Chat.objects.create(
+                participant1=other_user,
+                participant2=request.user
+            )
+        
+        serializer = self.get_serializer(chat)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get', 'post'], url_path='messages')
+    def messages(self, request, pk=None):
+        """Get messages for a chat or create a new message"""
+        chat = self.get_object()
+        
+        # Check if user is participant
+        if chat.participant1 != request.user and chat.participant2 != request.user:
+            raise PermissionDenied("You are not authorized to access this chat.")
+        
+        if request.method == 'GET':
+            # Get messages and mark unread messages as read
+            messages = Message.objects.filter(chat=chat).order_by('created_at')
+            
+            # Store original is_read status before marking as read
+            # This allows frontend to show unread messages visually
+            message_ids_with_original_status = {}
+            for msg in messages:
+                if msg.sender != request.user:
+                    message_ids_with_original_status[msg.id] = not msg.is_read
+            
+            # CRITICAL LOGIC: Mark messages as read if sender is not current user
+            # Only mark messages that are from the other participant and not yet read
+            messages_to_mark_read = messages.filter(
+                sender__in=[chat.participant1, chat.participant2],
+                is_read=False
+            ).exclude(sender=request.user)
+            
+            # Update in bulk
+            if messages_to_mark_read.exists():
+                messages_to_mark_read.update(is_read=True)
+                
+                # Update chat's updated_at to reflect activity
+                chat.updated_at = timezone.now()
+                chat.save(update_fields=['updated_at'])
+            
+            # Re-fetch messages to get updated is_read status
+            messages = Message.objects.filter(chat=chat).order_by('created_at')
+            serializer = MessageSerializer(messages, many=True)
+            response_data = serializer.data
+            
+            # Add original_is_unread field to messages that were unread before marking as read
+            for msg_data in response_data:
+                if msg_data['id'] in message_ids_with_original_status:
+                    msg_data['was_unread_before_fetch'] = message_ids_with_original_status[msg_data['id']]
+                else:
+                    msg_data['was_unread_before_fetch'] = False
+            
+            return Response(response_data)
+        
+        elif request.method == 'POST':
+            # Create new message
+            content = request.data.get('content', '').strip()
+            if not content:
+                return Response(
+                    {'error': 'Message content cannot be empty.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            message = Message.objects.create(
+                chat=chat,
+                sender=request.user,
+                content=content,
+                is_read=False  # New message is unread for the receiver
+            )
+            
+            # Update chat's updated_at to reflect new message
+            chat.updated_at = timezone.now()
+            chat.save(update_fields=['updated_at'])
+            
+            serializer = MessageSerializer(message)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='unread-count')
+    def unread_count(self, request):
+        """Get total count of unread messages for current user"""
+        user = request.user
+        
+        # Get all chats where user is a participant
+        user_chats = Chat.objects.filter(
+            Q(participant1=user) | Q(participant2=user)
+        )
+        
+        # Count unread messages where:
+        # 1. Message is in one of user's chats
+        # 2. Message sender is NOT the current user
+        # 3. Message is not read
+        unread_count = Message.objects.filter(
+            chat__in=user_chats,
+            is_read=False
+        ).exclude(sender=user).count()
+        
+        return Response({'unread_count': unread_count}, status=status.HTTP_200_OK)

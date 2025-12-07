@@ -9,7 +9,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown, MessageSquare, Star } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, X, Edit2, Plus, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown, MessageSquare, Star, Wallet } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 
@@ -124,10 +124,29 @@ export default function MyProfile() {
         avatar: profilePhotoData.avatar,
       });
 
-      setUser(response.data);
-      setFormData(prev => ({ ...prev, avatar: profilePhotoData.avatar }));
+      // Update user context
+      if (response.data) {
+        setUser(response.data);
+      }
+
+      // Update formData with the new avatar from response or use the uploaded one
+      const updatedAvatar = response.data?.profile?.avatar || profilePhotoData.avatar;
+      setFormData(prev => ({ ...prev, avatar: updatedAvatar }));
+      
+      // Clear preview and close edit mode
       setAvatarPreview(null);
       setEditingProfilePhoto(false);
+      
+      // Refresh profile data to ensure everything is in sync
+      const profileResponse = await api.get('/users/me/');
+      if (profileResponse.data) {
+        const userData = profileResponse.data;
+        setFormData(prev => ({
+          ...prev,
+          avatar: userData.profile?.avatar || updatedAvatar,
+        }));
+      }
+      
       toast.success('Profile photo updated successfully');
     } catch (error) {
       console.error('Error updating profile photo:', error);
@@ -264,8 +283,8 @@ export default function MyProfile() {
       const history = [];
       
       uniqueProposals.forEach(proposal => {
-        const isRequester = proposal.requester_id === user?.id || proposal.requester_username === formData.username;
-        const isProvider = proposal.provider_id === user?.id || proposal.provider_username === formData.username;
+        const isRequester = proposal.requester_id === user?.id || proposal.requester_username === user?.username;
+        const isProvider = proposal.provider_id === user?.id || proposal.provider_username === user?.username;
         const postType = proposal.post_type || proposal.post?.post_type;
 
         // Accepted proposals: Balance deduction
@@ -295,27 +314,49 @@ export default function MyProfile() {
           }
         }
 
-        // Completed proposals: Balance addition
+        // Completed proposals: Balance addition (for earners) and deduction (for payers)
         if (proposal.status === 'completed') {
-          let amount = 0;
-          let description = '';
-
-          if (postType === 'offer' && isProvider) {
-            // Offer: provider receives
-            amount = parseFloat(proposal.timebank_hour);
-            description = `Completed "${proposal.post_title || 'Post'}" (Offer)`;
-          } else if (postType === 'need' && isRequester) {
-            // Need: requester receives
-            amount = parseFloat(proposal.timebank_hour);
-            description = `Completed "${proposal.post_title || 'Post'}" (Need)`;
+          // Add deduction record for payers (if they haven't already been recorded as accepted)
+          if (postType === 'offer' && isRequester) {
+            // Offer: requester paid (deduction)
+            history.push({
+              id: `completed-deduction-${proposal.id}`,
+              type: 'deduction',
+              amount: parseFloat(proposal.timebank_hour),
+              description: `Paid for service "${proposal.post_title || 'Post'}" (Offer)`,
+              date: proposal.updated_at || proposal.created_at,
+              proposalId: proposal.id,
+            });
+          } else if (postType === 'need' && isProvider) {
+            // Need: provider paid (deduction)
+            history.push({
+              id: `completed-deduction-${proposal.id}`,
+              type: 'deduction',
+              amount: parseFloat(proposal.timebank_hour),
+              description: `Paid for service "${proposal.post_title || 'Post'}" (Need)`,
+              date: proposal.updated_at || proposal.created_at,
+              proposalId: proposal.id,
+            });
           }
 
-          if (amount !== 0) {
+          // Add addition record for earners
+          if (postType === 'offer' && isProvider) {
+            // Offer: provider receives
             history.push({
-              id: `completed-${proposal.id}`,
+              id: `completed-addition-${proposal.id}`,
               type: 'addition',
-              amount,
-              description,
+              amount: parseFloat(proposal.timebank_hour),
+              description: `Completed "${proposal.post_title || 'Post'}" (Offer)`,
+              date: proposal.updated_at || proposal.created_at,
+              proposalId: proposal.id,
+            });
+          } else if (postType === 'need' && isRequester) {
+            // Need: requester receives
+            history.push({
+              id: `completed-addition-${proposal.id}`,
+              type: 'addition',
+              amount: parseFloat(proposal.timebank_hour),
+              description: `Completed "${proposal.post_title || 'Post'}" (Need)`,
               date: proposal.updated_at || proposal.created_at,
               proposalId: proposal.id,
             });
@@ -436,6 +477,23 @@ export default function MyProfile() {
       // Sort by date (newest first)
       history.sort((a, b) => new Date(b.date) - new Date(a.date));
 
+      // Debug logs
+      console.log('Balance history calculation:', {
+        totalProposals: uniqueProposals.length,
+        historyItems: history.length,
+        history: history,
+        proposals: uniqueProposals.map(p => ({
+          id: p.id,
+          status: p.status,
+          job_status: p.job_status,
+          post_type: p.post_type || p.post?.post_type,
+          requester_id: p.requester_id,
+          provider_id: p.provider_id,
+          timebank_hour: p.timebank_hour,
+          post_title: p.post_title || p.post?.title,
+        }))
+      });
+
       setBalanceHistory(history);
     } catch (error) {
       console.error('Error fetching balance history:', error);
@@ -449,6 +507,79 @@ export default function MyProfile() {
     setShowBalanceHistory(true);
     fetchBalanceHistory();
   };
+
+  // Calculate TimeBank statistics
+  const [timeBankStats, setTimeBankStats] = useState({ earned: 0, spent: 0, pending: 0 });
+  
+  useEffect(() => {
+    const calculateStats = async () => {
+      try {
+        // Fetch all proposals
+        const [sentResponse, receivedResponse] = await Promise.all([
+          api.get('/proposals/?sent=true'),
+          api.get('/proposals/?received=true'),
+        ]);
+
+        const sentProposals = Array.isArray(sentResponse.data) 
+          ? sentResponse.data 
+          : (sentResponse.data?.results || []);
+        const receivedProposals = Array.isArray(receivedResponse.data) 
+          ? receivedResponse.data 
+          : (receivedResponse.data?.results || []);
+        
+        const allProposals = [...sentProposals, ...receivedProposals];
+        const uniqueProposals = Array.from(
+          new Map(allProposals.map(p => [p.id, p])).values()
+        );
+
+        let earned = 0;
+        let spent = 0;
+        let pending = 0;
+
+        uniqueProposals.forEach(proposal => {
+          const isRequester = proposal.requester_id === user?.id || proposal.requester_username === formData.username;
+          const isProvider = proposal.provider_id === user?.id || proposal.provider_username === formData.username;
+          const postType = proposal.post_type || proposal.post?.post_type;
+          const amount = parseFloat(proposal.timebank_hour) || 0;
+
+          // Earned: Completed proposals
+          if (proposal.status === 'completed') {
+            if (postType === 'offer' && isProvider) {
+              earned += amount;
+            } else if (postType === 'need' && isRequester) {
+              earned += amount;
+            }
+          }
+
+          // Spent: Accepted and completed proposals (harcanan ve tamamlanan)
+          if (proposal.status === 'completed' && proposal.job_status !== 'cancelled') {
+            if (postType === 'offer' && isRequester) {
+              spent += amount;
+            } else if (postType === 'need' && isProvider) {
+              spent += amount;
+            }
+          }
+
+          // Pending: Accepted but not completed yet (waiting for approval/completion)
+          if (proposal.status === 'accepted' && proposal.job_status !== 'cancelled' && proposal.status !== 'completed') {
+            if (postType === 'offer' && isRequester) {
+              pending += amount;
+            } else if (postType === 'need' && isProvider) {
+              pending += amount;
+            }
+          }
+        });
+
+        setTimeBankStats({ earned, spent, pending });
+      } catch (error) {
+        console.error('Error calculating TimeBank stats:', error);
+      }
+    };
+
+    if (user && formData.username) {
+      calculateStats();
+    }
+  }, [user, formData.username]);
 
   if (loading) {
     return (
@@ -471,24 +602,60 @@ export default function MyProfile() {
           </div>
         </div>
 
-        {/* TimeBank Balance Card */}
+        {/* TimeBank Wallet Card */}
         <Card 
-          className="p-6 bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20 cursor-pointer hover:from-primary/15 hover:to-primary/10 transition-colors"
+          className="p-6 bg-gradient-to-br from-primary/15 via-primary/10 to-secondary/10 border-primary/30 cursor-pointer hover:shadow-xl transition-all overflow-hidden relative"
           onClick={handleBalanceCardClick}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                <Clock className="w-6 h-6 text-primary" />
+          {/* Wallet Background Pattern */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-primary rounded-full -mr-32 -mt-32"></div>
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-secondary rounded-full -ml-24 -mb-24"></div>
+          </div>
+          
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 bg-gradient-to-br from-primary/30 to-primary/50 rounded-xl flex items-center justify-center shadow-lg">
+                  <Wallet className="w-7 h-7 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">TimeBank Wallet</h2>
+                  <p className="text-sm text-slate-600">Your time credits - Click to view history</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-semibold">TimeBank Balance</h2>
-                <p className="text-sm text-slate-600">Your available time credits - Click to view history</p>
+              <div className="text-right">
+                <p className="text-4xl font-bold text-primary">{formData.time_balance.toFixed(2)}</p>
+                <p className="text-sm text-slate-600 font-medium">hours</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold text-primary">{formData.time_balance.toFixed(2)}</p>
-              <p className="text-sm text-slate-600">hours</p>
+
+            {/* Statistics Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-primary/20 hover:bg-white transition-colors">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="w-4 h-4 text-green-600" />
+                  <p className="text-xs font-medium text-slate-600">Earned</p>
+                </div>
+                <p className="text-2xl font-bold text-green-600">+{timeBankStats.earned.toFixed(2)}</p>
+                <p className="text-xs text-slate-500">hours</p>
+              </div>
+              <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-primary/20 hover:bg-white transition-colors">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingDown className="w-4 h-4 text-red-600" />
+                  <p className="text-xs font-medium text-slate-600">Spent</p>
+                </div>
+                <p className="text-2xl font-bold text-red-600">-{timeBankStats.spent.toFixed(2)}</p>
+                <p className="text-xs text-slate-500">hours</p>
+              </div>
+              <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-primary/20 hover:bg-white transition-colors">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-4 h-4 text-slate-700" />
+                  <p className="text-xs font-medium text-slate-700">Pending</p>
+                </div>
+                <p className="text-2xl font-bold text-slate-700">-{timeBankStats.pending.toFixed(2)}</p>
+                <p className="text-xs text-slate-500">hours</p>
+              </div>
             </div>
           </div>
         </Card>
@@ -542,8 +709,9 @@ export default function MyProfile() {
           </div>
           <Separator className="mb-6" />
           <div className="flex flex-col lg:flex-row items-start gap-6">
-            <div className="flex items-start gap-6 flex-1 w-full">
-              <div className="w-24 h-24 bg-gradient-to-br from-primary/20 to-primary/40 rounded-full flex items-center justify-center border-4 border-white shadow-lg overflow-hidden">
+            {/* Left Side: Profile Photo and Info */}
+            <div className="flex flex-col items-center lg:items-start gap-4 flex-1">
+              <div className="w-40 h-40 bg-gradient-to-br from-primary/20 to-primary/40 rounded-full flex items-center justify-center border-4 border-white shadow-xl overflow-hidden">
                 {(avatarPreview || formData.avatar) ? (
                   <img 
                     src={avatarPreview || formData.avatar} 
@@ -551,76 +719,84 @@ export default function MyProfile() {
                     className="w-full h-full object-cover" 
                   />
                 ) : (
-                  <User className="w-12 h-12 text-primary" />
+                  <User className="w-20 h-20 text-primary" />
                 )}
               </div>
-              <div className="flex-1">
-                <h3 className="text-xl mb-1">{formData.username}</h3>
+              <div className="text-center lg:text-left">
+                <h3 className="text-2xl font-bold mb-1">{formData.username}</h3>
                 <p className="text-slate-600 text-sm">Community Member</p>
-                <p className="text-slate-600 text-sm mt-1">
-                  TimeBank Balance: <span className="font-semibold text-primary">{formData.time_balance} Hours</span>
-                </p>
-                {editingProfilePhoto && (
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <Label htmlFor="avatar-upload" className="mb-2 block">Upload Photo</Label>
-                      <Input
-                        id="avatar-upload"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        className="cursor-pointer"
-                      />
-                      <p className="text-xs text-slate-500 mt-1">
-                        Supported formats: JPG, PNG, GIF (Max 5MB)
-                      </p>
-                    </div>
-                    <div className="relative">
-                      <Label className="mb-2 block">Or Enter URL</Label>
-                      <Input
-                        type="url"
-                        value={profilePhotoData.avatar && !profilePhotoData.avatar.startsWith('data:') ? profilePhotoData.avatar : ''}
-                        onChange={(e) => {
-                          setProfilePhotoData({ avatar: e.target.value });
-                          setAvatarPreview(null);
-                        }}
-                        placeholder="Profile photo URL"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
+              {editingProfilePhoto && (
+                <div className="w-full mt-4 space-y-3">
+                  <div>
+                    <Label htmlFor="avatar-upload" className="mb-2 block">Upload Photo</Label>
+                    <Input
+                      id="avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileSelect}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Supported formats: JPG, PNG, GIF (Max 5MB)
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <Label className="mb-2 block">Or Enter URL</Label>
+                    <Input
+                      type="url"
+                      value={profilePhotoData.avatar && !profilePhotoData.avatar.startsWith('data:') ? profilePhotoData.avatar : ''}
+                      onChange={(e) => {
+                        setProfilePhotoData({ avatar: e.target.value });
+                        setAvatarPreview(null);
+                      }}
+                      placeholder="Profile photo URL"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Community Ratings Card */}
+            {/* Right Side: Community Ratings */}
             <div className="w-full lg:w-auto lg:min-w-[320px] space-y-3 bg-gradient-to-r from-primary/5 to-secondary/10 p-4 rounded-xl border border-primary/20 flex flex-col">
               <div className="flex items-center justify-between">
-                <h4 className="flex items-center gap-2 text-primary text-sm">
+                <h4 className="flex items-center gap-2 text-primary text-sm font-semibold">
                   <Award className="w-4 h-4" />
                   Community Ratings
                 </h4>
-                {formData.review_averages?.total_reviews > 0 && (
+                {/* {formData.review_averages?.total_reviews > 0 && (
                   <div className="flex items-center gap-1 text-xs text-primary">
                     <Star className="w-3 h-3 fill-primary" />
                     <span>{formData.review_averages.overall.toFixed(1)}/5</span>
                     <span className="text-muted-foreground">({formData.review_averages.total_reviews})</span>
                   </div>
-                )}
+                )} */}
               </div>
               {formData.review_averages?.total_reviews > 0 ? (
                 <div className="space-y-3">
-                  {/* Overall Rating */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <Label className="flex items-center gap-1.5 text-xs">
-                        <Star className="w-3 h-3 text-primary" />
-                        Overall Rating
-                      </Label>
-                      <span className="text-xs text-primary">
-                        {formData.review_averages.overall.toFixed(1)}/5
+                  {/* Overall Rating - Larger */}
+                  <div className="space-y-3 text-center pb-3 border-b border-primary/20">
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-3xl font-bold text-primary">
+                        {formData.review_averages.overall.toFixed(1)}
                       </span>
+                      <span className="text-2xl text-slate-500">/5</span>
                     </div>
-                    <Progress value={(formData.review_averages.overall / 5) * 100} className="h-1.5" />
+                    <div className="flex items-center justify-center gap-1">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`w-6 h-6 ${
+                            i < Math.round(formData.review_averages.overall)
+                              ? 'fill-yellow-400 text-yellow-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Based on {formData.review_averages.total_reviews} {formData.review_averages.total_reviews === 1 ? 'review' : 'reviews'}
+                    </p>
                   </div>
                   {/* Friendliness */}
                   <div className="space-y-1">
