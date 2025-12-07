@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
 import { Button } from './ui/button';
@@ -30,11 +30,11 @@ export function Header() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showMessages, setShowMessages] = useState(false);
+  const [showProposals, setShowProposals] = useState(false);
   const [sentProposals, setSentProposals] = useState([]);
   const [receivedProposals, setReceivedProposals] = useState([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   // Debug: Check user admin status
   useEffect(() => {
@@ -48,7 +48,7 @@ export function Header() {
 
   // Disable body scroll when drawer is open
   useEffect(() => {
-    if (showMessages) {
+    if (showProposals) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -57,7 +57,7 @@ export function Header() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showMessages]);
+  }, [showProposals]);
 
   const isAdmin = user?.is_staff || user?.is_superuser;
 
@@ -96,28 +96,82 @@ export function Header() {
   };
 
   const handleMessageClick = () => {
-    setShowMessages(!showMessages);
+    // Navigate to ChatBox page
+    navigate('/chat');
     setShowMenu(false);
-    setShowNotifications(false);
-    if (!showMessages) {
+    setShowProposals(false);
+    // Refresh unread count when navigating to chat page
+    fetchUnreadCount();
+  };
+
+  const handleNotificationClick = () => {
+    setShowProposals(!showProposals);
+    setShowMenu(false);
+    if (!showProposals) {
       fetchProposals();
     }
   };
 
-  // Listen for proposal updates (e.g., when cancelled)
+  // Fetch unread message count
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user) {
+      setUnreadMessageCount(0);
+      return;
+    }
+    
+    try {
+      const response = await api.get('/chats/unread-count/');
+      const count = response.data?.unread_count || 0;
+      setUnreadMessageCount(count);
+      console.log('Unread message count:', count); // Debug log
+    } catch (error) {
+      console.error('Error fetching unread message count:', error);
+      console.error('Error response:', error.response?.data);
+      setUnreadMessageCount(0);
+    }
+  }, [user]);
+
+  // Fetch unread count on mount and periodically
   useEffect(() => {
     if (!user) return;
+    
+    fetchUnreadCount();
+    
+    // Refresh unread count every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    
+    return () => clearInterval(interval);
+  }, [user, fetchUnreadCount]);
+
+  // Fetch proposals on mount and listen for updates
+  useEffect(() => {
+    if (!user) return;
+    
+    // Fetch proposals on mount
+    fetchProposals();
     
     const handleProposalUpdate = () => {
       fetchProposals();
     };
     
+    const handleMessageUpdate = () => {
+      fetchUnreadCount();
+    };
+    
     window.addEventListener('proposalUpdated', handleProposalUpdate);
+    window.addEventListener('messageUpdated', handleMessageUpdate);
     return () => {
       window.removeEventListener('proposalUpdated', handleProposalUpdate);
+      window.removeEventListener('messageUpdated', handleMessageUpdate);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Check if there are waiting proposals
+  const hasWaitingProposal = useMemo(() => {
+    return sentProposals.some(p => p.status === 'waiting' || p.status === 'pending') ||
+           receivedProposals.some(p => p.status === 'waiting' || p.status === 'pending');
+  }, [sentProposals, receivedProposals]);
 
   // Login/Register sayfalarında header gösterme
   if (location.pathname === '/login' || location.pathname === '/register') {
@@ -194,38 +248,30 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => {
-                setShowNotifications(!showNotifications);
-                setShowMenu(false);
-              }}
+              onClick={handleNotificationClick}
               className="relative hover:bg-primary/10"
             >
               <Bell className="w-5 h-5 text-primary" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              {hasWaitingProposal && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              )}
             </Button>
-
-            {/* Notifications Dropdown */}
-            {showNotifications && (
-              <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg w-80 max-h-96 overflow-auto z-50">
-                <div className="p-4 border-b border-gray-200">
-                  <h4 className="font-semibold text-sm text-gray-900">Notifications</h4>
-                </div>
-                <div className="p-4 text-sm text-gray-500 text-center">
-                  No new notifications
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Message Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleMessageClick}
-            className="hover:bg-primary/10"
-          >
-            <MessageCircle className="w-5 h-5 text-primary" />
-          </Button>
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleMessageClick}
+              className="hover:bg-primary/10"
+            >
+              <MessageCircle className="w-5 h-5 text-primary" />
+            </Button>
+            {unreadMessageCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full z-10"></span>
+            )}
+          </div>
 
           {/* Hamburger Menu Button */}
           <div className="relative">
@@ -234,7 +280,7 @@ export function Header() {
               size="icon"
               onClick={() => {
                 setShowMenu(!showMenu);
-                setShowNotifications(false);
+                setShowProposals(false);
               }}
               className="hover:bg-primary/10"
             >
@@ -353,13 +399,13 @@ export function Header() {
             )}
           </div>
 
-          {/* Messages Drawer */}
-          {showMessages && (
+          {/* Proposals Drawer (triggered by notification button) */}
+          {showProposals && (
             <>
               {/* Overlay */}
               <div
                 className="fixed inset-0 bg-black/50 z-40"
-                onClick={() => setShowMessages(false)}
+                onClick={() => setShowProposals(false)}
               />
               
               {/* Messages Drawer */}
@@ -371,7 +417,7 @@ export function Header() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setShowMessages(false)}
+                      onClick={() => setShowProposals(false)}
                       className="hover:bg-gray-100"
                     >
                       <X className="w-5 h-5" />
@@ -405,7 +451,7 @@ export function Header() {
                                 className="hover:shadow-md transition-shadow cursor-pointer"
                                 onClick={() => {
                                   navigate(`/negotiate/${proposal.post_id}`);
-                                  setShowMessages(false);
+                                  setShowProposals(false);
                                 }}
                               >
                                 <CardContent className="p-4">
@@ -498,7 +544,7 @@ export function Header() {
                                 className="hover:shadow-md transition-shadow cursor-pointer"
                                 onClick={() => {
                                   navigate(`/proposal-review/${proposal.id}`);
-                                  setShowMessages(false);
+                                  setShowProposals(false);
                                 }}
                               >
                                 <CardContent className="p-4">

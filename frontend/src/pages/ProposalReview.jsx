@@ -42,6 +42,7 @@ export default function ProposalReview() {
   const [showResponseForm, setShowResponseForm] = useState(false);
   const [responseAction, setResponseAction] = useState(null); // 'accept' or 'decline'
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [canAccept, setCanAccept] = useState(true); // Check if user can accept (balance < 10 for offers)
 
   useEffect(() => {
     const fetchProposal = async () => {
@@ -59,7 +60,27 @@ export default function ProposalReview() {
 
         // Fetch post details
         const postResponse = await api.get(`/posts/${proposalData.post_id}/`);
-        setPost(postResponse.data);
+        const postData = postResponse.data;
+        setPost(postData);
+
+        // Check balance for offer posts (provider receives credit when accepting)
+        if (postData?.post_type === 'offer' && user) {
+          try {
+            const userResponse = await api.get('/users/me/');
+            const currentBalance = userResponse.data?.profile?.time_balance || 0;
+            
+            if (currentBalance >= 10) {
+              setCanAccept(false);
+            } else {
+              setCanAccept(true);
+            }
+          } catch (err) {
+            console.error('Error checking balance:', err);
+            setCanAccept(true); // Allow accept if balance check fails
+          }
+        } else {
+          setCanAccept(true);
+        }
       } catch (err) {
         console.error('Error fetching proposal:', err);
         setError('Failed to load proposal');
@@ -72,7 +93,23 @@ export default function ProposalReview() {
     fetchProposal();
   }, [proposalId, user]);
 
-  const handleAcceptClick = () => {
+  const handleAcceptClick = async () => {
+    // Check balance for offer posts (provider receives credit when accepting)
+    if (post?.post_type === 'offer' && user) {
+      try {
+        const userResponse = await api.get('/users/me/');
+        const currentBalance = userResponse.data?.profile?.time_balance || 0;
+        
+        if (currentBalance >= 10) {
+          toast.error('You have 10 hours credit. You should spent some of your credit before providing another service.');
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking balance:', err);
+        // Continue if balance check fails
+      }
+    }
+    
     setResponseAction('accept');
     setShowResponseForm(true);
   };
@@ -84,6 +121,22 @@ export default function ProposalReview() {
 
   const handleAccept = async () => {
     if (!proposal) return;
+
+    // Check balance again before accepting (offer posts only)
+    if (post?.post_type === 'offer' && user) {
+      try {
+        const userResponse = await api.get('/users/me/');
+        const currentBalance = userResponse.data?.profile?.time_balance || 0;
+        
+        if (currentBalance >= 10) {
+          toast.error('You have 10 hours credit. You should spent some of your credit before providing another service.');
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking balance:', err);
+        // Continue if balance check fails
+      }
+    }
 
     try {
       setProcessing(true);
@@ -597,11 +650,18 @@ export default function ProposalReview() {
         {proposal.status === 'waiting' && !showResponseForm && (
           <Card className="shadow-md border-primary/20">
             <CardContent className="pt-6">
+              {!canAccept && post?.post_type === 'offer' && (
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800 font-medium">
+                    You have 10 hours credit. You should spent some of your credit before providing another service.
+                  </p>
+                </div>
+              )}
               <div className="flex gap-3">
                 <Button
                   onClick={handleAcceptClick}
-                  disabled={processing}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  disabled={processing || !canAccept}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Accept Proposal
@@ -629,6 +689,13 @@ export default function ProposalReview() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
+              {responseAction === 'accept' && !canAccept && post?.post_type === 'offer' && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800 font-medium">
+                    You have 10 hours credit. You should spent some of your credit before providing another service.
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="response-message" className="text-primary text-slate-900">
                   Message (Optional)
@@ -647,8 +714,8 @@ export default function ProposalReview() {
               <div className="flex gap-3 pt-2">
                 <Button
                   onClick={responseAction === 'accept' ? handleAccept : handleDecline}
-                  disabled={processing}
-                  className={`flex-1 ${responseAction === 'accept' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                  disabled={processing || (responseAction === 'accept' && !canAccept)}
+                  className={`flex-1 ${responseAction === 'accept' ? 'bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed' : ''}`}
                   variant={responseAction === 'decline' ? 'destructive' : 'default'}
                 >
                   {processing ? (

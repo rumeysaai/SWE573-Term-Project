@@ -4,6 +4,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -266,20 +267,6 @@ class Proposal(models.Model):
         return f"{self.requester.username} -> {self.post.title} ({self.status})"
 
 
-class Chat(models.Model):
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
-    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')
-    
-    message = models.TextField()
-    is_read = models.BooleanField(default=False)
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['created_at']
-
-    def __str__(self):
-        return f"{self.sender.username} -> {self.receiver.username}: {self.message[:50]}"
 
 
 class Job(models.Model):
@@ -380,3 +367,33 @@ class Review(models.Model):
 
     def __str__(self):
         return f"{self.reviewer.username} reviewed {self.reviewed_user.username} for proposal {self.proposal.id}"
+
+
+class Chat(models.Model):
+    """1-on-1 Chat model between two users"""
+    participant1 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chats_as_p1')
+    participant2 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chats_as_p2')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        unique_together = ['participant1', 'participant2']  # One chat per pair of users
+
+    def __str__(self):
+        return f"Chat between {self.participant1.username} and {self.participant2.username}"
+
+
+class Message(models.Model):
+    """Message model for Chat"""
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE)
+    content = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']  # Oldest first for display
+
+    def __str__(self):
+        return f"Message from {self.sender.username} in chat {self.chat.id}"

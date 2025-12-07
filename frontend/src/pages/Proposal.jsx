@@ -435,6 +435,55 @@ export default function Proposal() {
       return;
     }
 
+    // Check balance for 'offer' posts (requester pays)
+    if (postDetails?.type === 'offer') {
+      try {
+        // Fetch user's current balance and proposals
+        const [userResponse, sentResponse, receivedResponse] = await Promise.all([
+          api.get('/users/me/'),
+          api.get('/proposals/?sent=true'),
+          api.get('/proposals/?received=true'),
+        ]);
+
+        const currentBalance = userResponse.data?.profile?.time_balance || 0;
+        
+        // Calculate pending balance
+        const sentProposals = Array.isArray(sentResponse.data) 
+          ? sentResponse.data 
+          : (sentResponse.data?.results || []);
+        const receivedProposals = Array.isArray(receivedResponse.data) 
+          ? receivedResponse.data 
+          : (receivedResponse.data?.results || []);
+        
+        const allProposals = [...sentProposals, ...receivedProposals];
+        const uniqueProposals = Array.from(
+          new Map(allProposals.map(p => [p.id, p])).values()
+        );
+
+        let pending = 0;
+        uniqueProposals.forEach(proposal => {
+          const isRequester = proposal.requester_id === currentUser.id || proposal.requester_username === currentUser.userName;
+          const postType = proposal.post_type || proposal.post?.post_type;
+          const amount = parseFloat(proposal.timebank_hour) || 0;
+
+          // Pending: Accepted but not completed yet (for offer posts, requester pending)
+          if (proposal.status === 'accepted' && proposal.job_status !== 'cancelled' && postType === 'offer' && isRequester) {
+            pending += amount;
+          }
+        });
+
+        // Check if balance is sufficient: available balance must be >= requested hours
+        const availableBalance = currentBalance - pending;
+        if (availableBalance < proposalData.hours) {
+          toast.error(`Insufficient balance. You have ${availableBalance.toFixed(2)} hours available. You cannot propose more hours than your available balance.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking balance:', err);
+        // Continue with proposal creation if balance check fails
+      }
+    }
+
     try {
       // Notes field - only the additional notes, not time/location
       const notesText = proposalData.notes || '';
