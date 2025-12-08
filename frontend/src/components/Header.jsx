@@ -62,7 +62,7 @@ export function Header() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/');
     setShowMenu(false);
   };
 
@@ -183,7 +183,7 @@ export function Header() {
         {/* Left side - Logo and Title */}
         <div 
           className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/home')}
         >
           <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-md">
             <Leaf className="w-6 h-6" />
@@ -199,9 +199,9 @@ export function Header() {
         {/* Center - Navigation Links */}
         <div className="hidden lg:flex items-center gap-6 flex-1 justify-center">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/home')}
             className={`text-sm font-medium transition-colors hover:text-primary ${
-              location.pathname === '/' ? 'text-primary' : 'text-gray-700'
+              location.pathname === '/home' ? 'text-primary' : 'text-gray-700'
             }`}
           >
             Home
@@ -341,7 +341,7 @@ export function Header() {
                     <Button
                       variant="ghost"
                       className="w-full justify-start h-12"
-                      onClick={() => handleMenuClick('/')}
+                      onClick={() => handleMenuClick('/home')}
                     >
                       <HomeIcon className="w-5 h-5 mr-3" />
                       Home
