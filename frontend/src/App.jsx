@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import api from './api'; 
 import { Toaster } from 'sonner';
 
+import Welcome from './pages/Welcome';
 import Home from './pages/Home';
 import Post from './pages/Post';
 import PostDetails from './pages/PostDetails';
@@ -45,7 +46,7 @@ function ProtectedRoute({ children }) {
   }
   
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
   
   return children;
@@ -59,11 +60,11 @@ function AdminRoute({ children }) {
   }
   
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
   
   if (!user.is_staff && !user.is_superuser) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/home" replace />;
   }
   
   return children;
@@ -75,10 +76,20 @@ function PublicOnlyRoute({ children }) {
     return <LoadingSpinner />;
   }
   if (user) {
-    
-    return <Navigate to="/" replace />;
+    return <Navigate to="/home" replace />;
   }
   return children; 
+}
+
+function WelcomeRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+  if (user) {
+    return <Navigate to="/home" replace />;
+  }
+  return children;
 }
 
 export default function App() {
@@ -150,95 +161,258 @@ export default function App() {
     <AuthContext.Provider value={authContextValue}>
       <Toaster richColors position="top-right" closeButton />
       <Router>
-        <div className="flex flex-col min-h-screen">
-          <Header />
-          <main className="flex-1 px-6 md:px-8 lg:px-12">
-            <Routes>
-              {/* Sadece Misafirlerin Görebileceği Rotalar */}
-              <Route
-                path="/login"
-                element={<PublicOnlyRoute><Login /></PublicOnlyRoute>}
-              />
-              <Route
-                path="/register" 
-                element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>}
-              />
+        <Routes>
+          {/* Welcome Page - No Header/Footer */}
+          <Route
+            path="/"
+            element={<WelcomeRoute><Welcome /></WelcomeRoute>}
+          />
+          
+          {/* Public Routes - With Header/Footer */}
+          <Route
+            path="/login"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <PublicOnlyRoute><Login /></PublicOnlyRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <PublicOnlyRoute><Signup /></PublicOnlyRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/register" 
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <PublicOnlyRoute><Signup /></PublicOnlyRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
 
-              {/* Korumalı Rotalar */}
-              <Route
-                path="/"
-                element={<ProtectedRoute><Home /></ProtectedRoute>}
-              />
-              <Route
-                path="/post/new"
-                element={<ProtectedRoute><Post /></ProtectedRoute>}
-              />
-              <Route
-                path="/post/edit/:id"
-                element={<ProtectedRoute><Post /></ProtectedRoute>}
-              />
-              <Route
-                path="/post-details/:postId"
-                element={<ProtectedRoute><PostDetails /></ProtectedRoute>}
-              />
-              <Route
-                path="/negotiate/:postId"
-                element={<ProtectedRoute><Proposal /></ProtectedRoute>}
-              />
-              <Route
-                path="/proposal-review/:proposalId"
-                element={<ProtectedRoute><ProposalReview /></ProtectedRoute>}
-              />
-              <Route
-                path="/approval/:proposalId?"
-                element={<ProtectedRoute><Approval /></ProtectedRoute>}
-              />
-              <Route
-                path="/my-profile"
-                element={<ProtectedRoute><MyProfile /></ProtectedRoute>}
-              />
-              <Route
-                path="/profile/:username"
-                element={<ProtectedRoute><Profile /></ProtectedRoute>}
-              />
-              <Route
-                path="/forum/new"
-                element={<ProtectedRoute><Forum /></ProtectedRoute>}
-              />
-              <Route
-                path="/forums"
-                element={<ProtectedRoute><Forums /></ProtectedRoute>}
-              />
-              <Route
-                path="/forum/:id"
-                element={<ProtectedRoute><TopicDetail /></ProtectedRoute>}
-              />
-              <Route
-                path="/chat"
-                element={<ProtectedRoute><Chat /></ProtectedRoute>}
-              />
-              <Route
-                path="/how-to"
-                element={<ProtectedRoute><HowTo /></ProtectedRoute>}
-              />
-              <Route
-                path="/timebank"
-                element={<ProtectedRoute><TimeBank /></ProtectedRoute>}
-              />
-              <Route
-                path="/about"
-                element={<ProtectedRoute><About /></ProtectedRoute>}
-              />
-              <Route
-                path="/admin-panel"
-                element={<AdminRoute><AdminDashboard /></AdminRoute>}
-              />
-              
-              <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
-          </main>
-          <Footer />
-        </div>
+          {/* Protected Routes - With Header/Footer */}
+          <Route
+            path="/home"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Home /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/post/new"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Post /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/post/edit/:id"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Post /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/post-details/:postId"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><PostDetails /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/negotiate/:postId"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Proposal /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/proposal-review/:proposalId"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><ProposalReview /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/approval/:proposalId?"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Approval /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/my-profile"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><MyProfile /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/profile/:username"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Profile /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/forum/new"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Forum /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/forums"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Forums /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/forum/:id"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><TopicDetail /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/chat"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Chat /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/how-to"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><HowTo /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/timebank"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><TimeBank /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/about"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><About /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/admin-panel"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <AdminRoute><AdminDashboard /></AdminRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
       </Router>
     </AuthContext.Provider>
   );
