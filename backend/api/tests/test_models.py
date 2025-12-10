@@ -64,8 +64,9 @@ class ProfileModelTest(TestCase):
     
     def test_get_review_averages_with_reviews(self):
         """Test get_review_averages calculation"""
-        # Create another user
-        reviewer = User.objects.create_user(username='reviewer', password='pass123')
+        # Create two reviewers
+        reviewer1 = User.objects.create_user(username='reviewer1', password='pass123')
+        reviewer2 = User.objects.create_user(username='reviewer2', password='pass123')
         
         # Create a post and proposal
         post = Post.objects.create(
@@ -79,16 +80,16 @@ class ProfileModelTest(TestCase):
         
         proposal = Proposal.objects.create(
             post=post,
-            requester=reviewer,
+            requester=reviewer1,
             provider=self.user,
             timebank_hour=Decimal('1.00'),
             status='completed'
         )
         
-        # Create reviews
+        # Create reviews from different reviewers
         Review.objects.create(
             proposal=proposal,
-            reviewer=reviewer,
+            reviewer=reviewer1,
             reviewed_user=self.user,
             friendliness=5,
             time_management=4,
@@ -97,9 +98,18 @@ class ProfileModelTest(TestCase):
             work_quality=5
         )
         
+        # Create second proposal for second reviewer
+        proposal2 = Proposal.objects.create(
+            post=post,
+            requester=reviewer2,
+            provider=self.user,
+            timebank_hour=Decimal('1.00'),
+            status='completed'
+        )
+        
         Review.objects.create(
-            proposal=proposal,
-            reviewer=reviewer,
+            proposal=proposal2,
+            reviewer=reviewer2,
             reviewed_user=self.user,
             friendliness=4,
             time_management=5,
