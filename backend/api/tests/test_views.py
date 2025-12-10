@@ -135,7 +135,7 @@ class PostAPITest(TestCase):
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['title'], 'Test Post')
-        self.assertEqual(response.data['posted_by'], self.user.id)
+        self.assertEqual(response.data['posted_by_id'], self.user.id)
     
     def test_list_posts(self):
         """Test listing posts"""
@@ -151,7 +151,7 @@ class PostAPITest(TestCase):
         url = reverse('post-list')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data), 1)
     
     def test_get_post_detail(self):
         """Test getting post details"""
@@ -209,8 +209,8 @@ class PostAPITest(TestCase):
         url = reverse('post-list') + '?post_type=offer'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['post_type'], 'offer')
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['post_type'], 'offer')
     
     def test_search_posts(self):
         """Test searching posts"""
@@ -234,8 +234,8 @@ class PostAPITest(TestCase):
         url = reverse('post-list') + '?search=Python'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertIn('Python', response.data['results'][0]['title'])
+        self.assertEqual(len(response.data), 1)
+        self.assertIn('Python', response.data[0]['title'])
 
 
 class CommentAPITest(TestCase):
@@ -279,7 +279,7 @@ class CommentAPITest(TestCase):
         url = reverse('comment-list') + f'?post_id={self.post.id}'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data), 1)
     
     def test_delete_own_comment(self):
         """Test deleting own comment"""
@@ -375,7 +375,7 @@ class ProposalAPITest(TestCase):
         url = reverse('proposal-list') + '?sent=true'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data), 1)
     
     def test_list_received_proposals(self):
         """Test listing received proposals"""
@@ -391,7 +391,7 @@ class ProposalAPITest(TestCase):
         url = reverse('proposal-list') + '?received=true'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data), 1)
 
 
 class ReviewAPITest(TestCase):
@@ -553,7 +553,7 @@ class ForumAPITest(TestCase):
         self.client.force_authenticate(user=self.user)
         url = reverse('forum-comment-list')
         data = {
-            'topic': topic.id,
+            'topic_id': topic.id,
             'content': 'Test Comment'
         }
         response = self.client.post(url, data, format='json')
