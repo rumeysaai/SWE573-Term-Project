@@ -255,7 +255,8 @@ export default function PostDetails() {
                   try {
                     // Create or get existing chat with the post owner
                     const response = await api.post('/chats/', {
-                      user_id: post.postedById
+                      user_id: post.postedById,
+                      post_id: post.id
                     });
                     
                     // Navigate to chat page with the chat ID

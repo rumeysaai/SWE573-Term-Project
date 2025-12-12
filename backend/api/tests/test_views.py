@@ -442,6 +442,45 @@ class ReviewAPITest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['reviewer'], self.reviewer.id)
         self.assertEqual(response.data['reviewed_user'], self.reviewed_user.id)
+    
+    def test_both_parties_can_review(self):
+        """Test that both requester and provider can review each other"""
+        # Requester reviews provider
+        self.client.force_authenticate(user=self.reviewer)
+        url = reverse('review-list')
+        data = {
+            'proposal': self.proposal.id,
+            'friendliness': 5,
+            'time_management': 4,
+            'reliability': 5,
+            'communication': 4,
+            'work_quality': 5,
+            'comment': 'Provider did great work!'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['reviewer'], self.reviewer.id)
+        self.assertEqual(response.data['reviewed_user'], self.reviewed_user.id)
+        
+        # Provider reviews requester
+        self.client.force_authenticate(user=self.reviewed_user)
+        data = {
+            'proposal': self.proposal.id,
+            'friendliness': 4,
+            'time_management': 5,
+            'reliability': 4,
+            'communication': 5,
+            'work_quality': 4,
+            'comment': 'Requester was excellent!'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['reviewer'], self.reviewed_user.id)
+        self.assertEqual(response.data['reviewed_user'], self.reviewer.id)
+        
+        # Verify both reviews exist
+        reviews = Review.objects.filter(proposal=self.proposal)
+        self.assertEqual(reviews.count(), 2)
 
 
 class ChatAPITest(TestCase):

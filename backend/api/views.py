@@ -77,7 +77,7 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-# --- NEWLY ADDED LOGOUT VIEW ---
+
 class LogoutView(APIView):
     # User must be authenticated to logout
     permission_classes = [permissions.IsAuthenticated]
@@ -174,9 +174,7 @@ class TagViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class PostViewSet(viewsets.ModelViewSet):
-    queryset = Post.objects.all().order_by('-created_at')
     serializer_class = PostSerializer
-    
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def perform_create(self, serializer):
@@ -228,7 +226,13 @@ class PostViewSet(viewsets.ModelViewSet):
         Adds geographical bounding box filter and hides posts based on user permissions.
         Query parameters: min_lat, max_lat, min_lon, max_lon
         """
-        queryset = super().get_queryset()
+        # Optimize queries with select_related and prefetch_related
+        queryset = Post.objects.select_related(
+            'posted_by',
+            'posted_by__profile'
+        ).prefetch_related(
+            'tags'
+        ).order_by('-created_at')
         
         # Non-staff users only see non-hidden posts
         if not self.request.user.is_authenticated or not self.request.user.is_staff:
@@ -318,12 +322,24 @@ class MyProfileView(APIView):
     """
     GET /api/users/me/ - View own profile
     PUT /api/users/me/ - Edit own profile
+    GET /api/users/me/time-balance/ - Get only time_balance (lightweight)
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        """View own profile"""
-        return Response(UserSerializer(request.user).data)
+        """View own profile - optimized with select_related"""
+        # Check if only time_balance is requested (lightweight endpoint)
+        if request.query_params.get('fields') == 'time_balance':
+            return Response({
+                'time_balance': request.user.profile.time_balance
+            })
+        
+        # Optimize query to prefetch profile and interested_tags
+        user = User.objects.select_related('profile').prefetch_related('profile__interested_tags').get(id=request.user.id)
+        
+        # Pass request context to serializer for conditional review_averages loading
+        serializer = UserSerializer(user, context={'request': request})
+        return Response(serializer.data)
 
     def put(self, request, *args, **kwargs):
         """Edit own profile"""
@@ -485,7 +501,34 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter proposals by requester (sent proposals), provider (received proposals), or post ID"""
-        queryset = Proposal.objects.all()
+        # Optimize queries with select_related and prefetch_related to avoid N+1 queries
+        # Use only() to fetch only required fields for better performance
+        queryset = Proposal.objects.select_related(
+            'requester',
+            'provider',
+            'post',
+            'requester__profile',
+            'provider__profile'
+        ).prefetch_related(
+            'jobs',
+            'jobs__cancelled_by',
+            'reviews'
+        ).only(
+            # Proposal fields
+            'id', 'status', 'created_at', 'updated_at',
+            'notes', 'timebank_hour', 'proposed_date', 'proposed_time', 'proposed_location',
+            'provider_approved', 'requester_approved',
+            # Requester fields
+            'requester__id', 'requester__username', 'requester__first_name', 'requester__last_name',
+            'requester__profile__avatar',
+            # Provider fields
+            'provider__id', 'provider__username', 'provider__first_name', 'provider__last_name',
+            'provider__profile__avatar',
+            # Post fields
+            'post__id', 'post__title', 'post__post_type',
+            # Foreign keys
+            'post_id', 'requester_id', 'provider_id'
+        )
         
         # Filter by post ID if provided
         post_id = self.request.query_params.get('post', None)
@@ -519,6 +562,56 @@ class ProposalViewSet(viewsets.ModelViewSet):
         """Set the requester to the current authenticated user and provider to the post owner"""
         post = serializer.validated_data['post']
         serializer.save(requester=self.request.user, provider=post.posted_by)
+    
+    @action(detail=False, methods=['get'], url_path='for-approval')
+    def for_approval(self, request):
+        """
+        Get all proposals that need approval (both sent and received)
+        This combines sent and received proposals in a single API call
+        Optimized with only() to fetch only required fields
+        """
+        user = request.user
+        
+        # Get optimized queryset with only() to reduce payload size
+        from django.db.models import Q
+        queryset = Proposal.objects.select_related(
+            'requester',
+            'provider',
+            'post',
+            'requester__profile',
+            'provider__profile'
+        ).prefetch_related(
+            'jobs',
+            'jobs__cancelled_by',
+            'reviews'
+        ).filter(
+            Q(requester=user) | Q(provider=user)
+        ).only(
+            # Proposal fields
+            'id', 'status', 'created_at', 'updated_at',
+            'notes', 'timebank_hour', 'proposed_date', 'proposed_time', 'proposed_location',
+            'provider_approved', 'requester_approved',
+            # Requester fields
+            'requester__id', 'requester__username', 'requester__first_name', 'requester__last_name',
+            'requester__profile__avatar', 'requester__profile__time_balance',
+            # Provider fields
+            'provider__id', 'provider__username', 'provider__first_name', 'provider__last_name',
+            'provider__profile__avatar', 'provider__profile__time_balance',
+            # Post fields
+            'post__id', 'post__title', 'post__post_type', 'post__location',
+            # Foreign keys
+            'post_id', 'requester_id', 'provider_id'
+        ).order_by('-created_at')
+        
+        # Use pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        # Fallback if pagination not configured
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
     
     def update(self, request, *args, **kwargs):
         """Handle update with proper error handling for balance validation"""
@@ -641,22 +734,58 @@ class ReviewViewSet(viewsets.ModelViewSet):
         return queryset.order_by('-created_at')
 
     def perform_create(self, serializer):
-        """Set the reviewer to the current authenticated user"""
+        """Set the reviewer to the current authenticated user and allow both parties to review each other"""
         proposal = serializer.validated_data['proposal']
         
-        # Determine reviewed_user based on post type and current user
-        post_type = proposal.post.post_type
+        # Refresh proposal from database to get latest job information
+        proposal.refresh_from_db()
+        
+        # Check if proposal is accepted
+        if proposal.status != 'accepted' and proposal.status != 'completed':
+            raise PermissionDenied("Reviews can only be created for accepted or completed proposals.")
+        
+        # Check if user is either requester or provider
         is_requester = self.request.user.id == proposal.requester_id
         is_provider = self.request.user.id == proposal.provider_id
         
-        if post_type == 'offer' and is_requester:
-            # Offer: requester reviews provider
+        if not (is_requester or is_provider):
+            raise PermissionDenied("You are not authorized to create a review for this proposal.")
+        
+        # Determine reviewed_user and check if review is allowed
+        # For both offer and need: user can review the other party after they themselves have approved OR declined
+        # Check if user has cancelled the job
+        from api.models import Job
+        job = Job.objects.filter(proposal=proposal).select_related('cancelled_by').first()
+        user_cancelled_job = False
+        if job and job.status == 'cancelled' and job.cancelled_by:
+            if is_requester and job.cancelled_by.id == proposal.requester_id:
+                user_cancelled_job = True
+            elif is_provider and job.cancelled_by.id == proposal.provider_id:
+                user_cancelled_job = True
+        
+        if is_requester:
+            # Requester reviews provider
             reviewed_user = proposal.provider
-        elif post_type == 'need' and is_provider:
-            # Need: provider reviews requester
+            # Requester can review if requester has approved OR cancelled the job
+            if not proposal.requester_approved and not user_cancelled_job:
+                raise PermissionDenied("You can only review after you have approved or declined the proposal.")
+        elif is_provider:
+            # Provider reviews requester
             reviewed_user = proposal.requester
+            # Provider can review if provider has approved OR cancelled the job
+            if not proposal.provider_approved and not user_cancelled_job:
+                raise PermissionDenied("You can only review after you have approved or declined the proposal.")
         else:
             raise PermissionDenied("You are not authorized to create a review for this proposal.")
+        
+        # Check if review already exists for this proposal and reviewer
+        existing_review = Review.objects.filter(
+            proposal=proposal,
+            reviewer=self.request.user
+        ).exists()
+        
+        if existing_review:
+            raise PermissionDenied("You have already created a review for this proposal.")
         
         serializer.save(reviewer=self.request.user, reviewed_user=reviewed_user)
 
@@ -684,13 +813,25 @@ class ChatViewSet(viewsets.ModelViewSet):
         return context
 
     def create(self, request, *args, **kwargs):
-        """Create or get existing chat with user_id"""
+        """Create or get existing chat with user_id and post_id"""
         user_id = request.data.get('user_id')
+        post_id = request.data.get('post_id')
+        
         if not user_id:
             return Response(
                 {'error': 'user_id is required.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        post = None
+        if post_id:
+            try:
+                post = Post.objects.get(id=post_id)
+            except Post.DoesNotExist:
+                return Response(
+                    {'error': 'Post not found.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
         
         try:
             other_user = User.objects.get(id=user_id)
@@ -706,11 +847,22 @@ class ChatViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Check if chat already exists (in either direction)
-        chat = Chat.objects.filter(
-            (Q(participant1=request.user) & Q(participant2=other_user)) |
-            (Q(participant1=other_user) & Q(participant2=request.user))
-        ).first()
+        # Check if chat already exists (in either direction) for this post (if post provided)
+        if post:
+            chat = Chat.objects.filter(
+                post=post
+            ).filter(
+                (Q(participant1=request.user) & Q(participant2=other_user)) |
+                (Q(participant1=other_user) & Q(participant2=request.user))
+            ).first()
+        else:
+            # If no post, check for any chat between these users (backward compatibility)
+            chat = Chat.objects.filter(
+                post__isnull=True
+            ).filter(
+                (Q(participant1=request.user) & Q(participant2=other_user)) |
+                (Q(participant1=other_user) & Q(participant2=request.user))
+            ).first()
         
         if chat:
             # Chat exists, return it
@@ -721,12 +873,14 @@ class ChatViewSet(viewsets.ModelViewSet):
         if request.user.id < other_user.id:
             chat = Chat.objects.create(
                 participant1=request.user,
-                participant2=other_user
+                participant2=other_user,
+                post=post
             )
         else:
             chat = Chat.objects.create(
                 participant1=other_user,
-                participant2=request.user
+                participant2=request.user,
+                post=post
             )
         
         serializer = self.get_serializer(chat)

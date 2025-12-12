@@ -138,8 +138,13 @@ export default function ChatBox({ chat, currentUser }) {
               <User className="w-5 h-5 text-primary" />
             </div>
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="font-semibold text-gray-900">{getOtherUser()}</h3>
+            {chat.post_title && (
+              <p className="text-sm text-gray-500 mt-1">
+                {chat.post_type === 'offer' ? 'Offer' : chat.post_type === 'need' ? 'Need' : 'Post'}: {chat.post_title}
+              </p>
+            )}
           </div>
         </div>
       </div>

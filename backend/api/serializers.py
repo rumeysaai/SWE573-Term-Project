@@ -44,15 +44,46 @@ class UserSerializer(serializers.ModelSerializer):
     
     def get_profile(self, obj):
         # Get and return profile data
-        interested_tags = obj.profile.interested_tags.all()
+        # Use prefetched interested_tags if available
+        interested_tags = getattr(obj.profile, '_prefetched_objects_cache', {}).get('interested_tags', None)
+        if interested_tags is None:
+            interested_tags = obj.profile.interested_tags.all()
+        else:
+            interested_tags = list(interested_tags)
+        
+        # Lazy load review_averages - only calculate if explicitly requested
+        # This is a major performance win as review calculation can be slow
+        # DEFAULT: Don't calculate reviews unless explicitly requested
+        review_averages = None
+        request = self.context.get('request')
+        if request and request.query_params.get('include_reviews') == 'true':
+            try:
+                review_averages = obj.profile.get_review_averages()
+            except Exception:
+                review_averages = None
+        
+        # Return tag details along with IDs to avoid frontend fetch
+        # This eliminates the need for a separate /tags/ API call
+        tag_details = []
+        for tag in interested_tags:
+            tag_details.append({
+                'id': tag.id,
+                'name': tag.name,
+                'label': tag.name,  # Use name as label
+                'wikidata_id': tag.wikidata_id,
+                'description': tag.description,
+                'is_custom': tag.is_custom
+            })
+        
         return {
             'time_balance': obj.profile.time_balance,
-            'review_averages': obj.profile.get_review_averages(),
+            'review_averages': review_averages,
             'avatar': obj.profile.avatar,
             'bio': obj.profile.bio if hasattr(obj.profile, 'bio') else None,
             'phone': obj.profile.phone if hasattr(obj.profile, 'phone') else None,
             'location': obj.profile.location if hasattr(obj.profile, 'location') else None,
-            'interested_tags': [tag.id for tag in interested_tags],  # Return tag IDs
+            'interested_tags': [tag.id for tag in interested_tags],  # Return tag IDs for backward compatibility
+            'interested_tags_details': tag_details,  # Return full tag details to avoid frontend fetch
         }
 
 # NEW: Serializer for registration
@@ -201,7 +232,13 @@ class PostSerializer(serializers.ModelSerializer):
     
     def get_tags(self, obj):
         """Return tags as name list in response"""
-        return [tag.name for tag in obj.tags.all()]
+        # Use prefetched tags if available
+        tags = getattr(obj, '_prefetched_objects_cache', {}).get('tags', None)
+        if tags is not None:
+            return [tag.name for tag in tags]
+        # If not prefetched, return empty list to avoid N+1 queries
+        # Tags should always be prefetched in PostViewSet
+        return []
     
     def _process_tags(self, tags_data):
         """Helper method to process tags from various formats"""
@@ -339,21 +376,83 @@ class CommentSerializer(serializers.ModelSerializer):
 
 
 class ProposalSerializer(serializers.ModelSerializer):
-    post_id = serializers.IntegerField(source='post.id', read_only=True)
-    post_title = serializers.CharField(source='post.title', read_only=True)
-    post_type = serializers.CharField(source='post.post_type', read_only=True)
+    post_id = serializers.IntegerField(source='post.id', read_only=True, allow_null=True)
+    post_title = serializers.CharField(source='post.title', read_only=True, allow_null=True)
+    post_type = serializers.CharField(source='post.post_type', read_only=True, allow_null=True)
     requester_id = serializers.IntegerField(source='requester.id', read_only=True)
     requester_username = serializers.CharField(source='requester.username', read_only=True)
+    requester_avatar = serializers.CharField(source='requester.profile.avatar_url', read_only=True)
     provider_id = serializers.IntegerField(source='provider.id', read_only=True)
     provider_username = serializers.CharField(source='provider.username', read_only=True)
+    provider_avatar = serializers.CharField(source='provider.profile.avatar_url', read_only=True)
+    has_reviewed = serializers.SerializerMethodField()
+    can_review = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+    
+    def get_has_reviewed(self, obj):
+        """Check if current user has reviewed this proposal"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        
+        # Use prefetched reviews if available
+        reviews = getattr(obj, '_prefetched_objects_cache', {}).get('reviews', None)
+        if reviews is not None:
+            return any(r.reviewer_id == request.user.id for r in reviews)
+        
+        # If not prefetched, return False to avoid N+1 queries
+        return False
+    
+    def get_can_review(self, obj):
+        """Check if current user can review this proposal"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        
+        user = request.user
+        is_requester = user.id == obj.requester_id
+        is_provider = user.id == obj.provider_id
+        
+        if not (is_requester or is_provider):
+            return False
+        
+        # Check if user has approved OR cancelled the job
+        # Only use prefetched jobs to avoid N+1 queries
+        jobs = getattr(obj, '_prefetched_objects_cache', {}).get('jobs', None)
+        if jobs is not None:
+            job = jobs[0] if jobs else None
+            user_cancelled_job = False
+            if job and job.status == 'cancelled' and job.cancelled_by:
+                if is_requester and job.cancelled_by.id == obj.requester_id:
+                    user_cancelled_job = True
+                elif is_provider and job.cancelled_by.id == obj.provider_id:
+                    user_cancelled_job = True
+            
+            if is_requester:
+                return obj.requester_approved or user_cancelled_job
+            elif is_provider:
+                return obj.provider_approved or user_cancelled_job
+        
+        # If jobs not prefetched, only check approval status
+        if is_requester:
+            return obj.requester_approved
+        elif is_provider:
+            return obj.provider_approved
+        
+        return False
 
     def to_representation(self, instance):
         """Override to return 'completed' if associated Job is completed, otherwise return proposal status"""
         data = super().to_representation(instance)
         # Check if there's a Job associated with this proposal
-        job = instance.jobs.first()  # Get the first (and typically only) job for this proposal
+        # Only use prefetched jobs to avoid N+1 queries
+        jobs = getattr(instance, '_prefetched_objects_cache', {}).get('jobs', None)
+        if jobs is not None:
+            job = jobs[0] if jobs else None
+        else:
+            # If not prefetched, don't query - just set defaults
+            job = None
         if job:
             # Include job status and cancelled_by info in the response
             data['job_status'] = job.status
@@ -438,9 +537,13 @@ class ProposalSerializer(serializers.ModelSerializer):
             'requester',
             'requester_id',
             'requester_username',
+            'requester_avatar',
             'provider',
             'provider_id',
             'provider_username',
+            'provider_avatar',
+            'has_reviewed',
+            'can_review',
             'notes',
             'timebank_hour',
             'status',
@@ -463,6 +566,18 @@ class ReviewSerializer(serializers.ModelSerializer):
     proposal_id = serializers.IntegerField(source='proposal.id', read_only=True)
     post_title = serializers.CharField(source='proposal.post.title', read_only=True)
     post_id = serializers.IntegerField(source='proposal.post.id', read_only=True)
+    post_type = serializers.CharField(source='proposal.post.post_type', read_only=True)
+    role = serializers.SerializerMethodField()
+
+    def get_role(self, obj):
+        """Determine the role of reviewed_user in this proposal"""
+        # If reviewed_user is the provider, role is "provider"
+        if obj.reviewed_user.id == obj.proposal.provider.id:
+            return "provider"
+        # If reviewed_user is the requester, role is "requester"
+        elif obj.reviewed_user.id == obj.proposal.requester.id:
+            return "requester"
+        return None
 
     class Meta:
         model = Review
@@ -472,6 +587,8 @@ class ReviewSerializer(serializers.ModelSerializer):
             'proposal_id',
             'post_id',
             'post_title',
+            'post_type',
+            'role',
             'reviewer',
             'reviewer_id',
             'reviewer_username',
@@ -515,6 +632,9 @@ class ChatListSerializer(serializers.ModelSerializer):
     other_user_avatar = serializers.SerializerMethodField()
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
+    post_id = serializers.SerializerMethodField()
+    post_title = serializers.SerializerMethodField()
+    post_type = serializers.SerializerMethodField()
 
     def get_other_user(self, obj):
         """Get the other participant's username (not the current user)"""
@@ -551,6 +671,18 @@ class ChatListSerializer(serializers.ModelSerializer):
             }
         return None
 
+    def get_post_id(self, obj):
+        """Get post ID if post exists"""
+        return obj.post.id if obj.post else None
+
+    def get_post_title(self, obj):
+        """Get post title if post exists"""
+        return obj.post.title if obj.post else None
+
+    def get_post_type(self, obj):
+        """Get post type if post exists"""
+        return obj.post.post_type if obj.post else None
+
     def get_unread_count(self, obj):
         """Get count of unread messages for current user in this chat"""
         request = self.context.get('request')
@@ -570,6 +702,10 @@ class ChatListSerializer(serializers.ModelSerializer):
             'id',
             'participant1',
             'participant2',
+            'post',
+            'post_id',
+            'post_title',
+            'post_type',
             'other_user',
             'other_user_avatar',
             'last_message',

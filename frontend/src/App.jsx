@@ -12,6 +12,7 @@ import PostDetails from './pages/PostDetails';
 import Proposal from './pages/Proposal';
 import ProposalReview from './pages/ProposalReview';
 import Approval from './pages/Approval';
+import Review from './pages/Review';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Profile from './pages/Profile';
@@ -286,6 +287,18 @@ export default function App() {
                 <Header />
                 <main className="flex-1 px-6 md:px-8 lg:px-12">
                   <ProtectedRoute><Approval /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/review/:proposalId"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ProtectedRoute><Review /></ProtectedRoute>
                 </main>
                 <Footer />
               </div>

@@ -12,13 +12,9 @@ import {
   User,
   Loader2,
   Star,
-  Smile,
-  Timer,
-  Shield,
-  MessageSquare,
-  Award,
   XCircle,
 } from 'lucide-react';
+import { SimpleAvatar } from '../components/ui/SimpleAvatar';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
@@ -37,20 +33,12 @@ export default function Approval() {
   const [processing, setProcessing] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
-  const [existingReview, setExistingReview] = useState(null);
-  const [reviewData, setReviewData] = useState({
-    friendliness: 0,
-    time_management: 0,
-    reliability: 0,
-    communication: 0,
-    work_quality: 0,
-    comment: '',
-  });
-  const [submittingReview, setSubmittingReview] = useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [cancellationReason, setCancellationReason] = useState('other');
   const [declining, setDeclining] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [canReview, setCanReview] = useState(false);
 
   // Fetch user's approval-waiting proposals (if no proposalId)
   useEffect(() => {
@@ -60,17 +48,24 @@ export default function Approval() {
       try {
         setLoadingList(true);
         
-        // Fetch sent proposals
-        const sentResponse = await api.get('/proposals/', { params: { sent: 'true' } });
-        const sentData = Array.isArray(sentResponse.data) ? sentResponse.data : (sentResponse.data?.results || []);
+        // Fetch all proposals for approval in a single API call (optimized endpoint with pagination)
+        const response = await api.get('/proposals/for-approval/', {
+          params: { page: 1, page_size: 100 } // Get first 100 proposals (adjust as needed)
+        });
         
-        // Fetch received proposals
-        const receivedResponse = await api.get('/proposals/', { params: { received: 'true' } });
-        const receivedData = Array.isArray(receivedResponse.data) ? receivedResponse.data : (receivedResponse.data?.results || []);
+        // Handle paginated response
+        let allProposals = [];
+        if (response.data.results) {
+          // Paginated response
+          allProposals = response.data.results;
+          // Note: For now we fetch first page only. Can be extended to load more pages on scroll
+        } else if (Array.isArray(response.data)) {
+          // Non-paginated response (fallback)
+          allProposals = response.data;
+        }
         
-        // Combine and filter for accepted or completed proposals (but exclude cancelled proposals)
+        // Filter for accepted or completed proposals (but exclude cancelled proposals)
         // However, include proposals that have cancelled jobs, but only if the current user is involved
-        const allProposals = [...sentData, ...receivedData];
         const relevantProposals = allProposals.filter(p => {
           // First check if proposal has cancelled job
           if (p.job_status === 'cancelled') {
@@ -138,11 +133,35 @@ export default function Approval() {
           return dateB - dateA; // Reverse for newest first
         };
         
+        // Sort completed proposals by date (newest first - reverse order)
+        const sortCompletedByDate = (a, b) => {
+          const dateA = a.proposed_date ? new Date(a.proposed_date) : new Date(0);
+          const dateB = b.proposed_date ? new Date(b.proposed_date) : new Date(0);
+          
+          // If same date, check time
+          if (dateA.getTime() === dateB.getTime() && a.proposed_time && b.proposed_time) {
+            const timeA = a.proposed_time.split(':').map(Number);
+            const timeB = b.proposed_time.split(':').map(Number);
+            const minutesA = timeA[0] * 60 + (timeA[1] || 0);
+            const minutesB = timeB[0] * 60 + (timeB[1] || 0);
+            return minutesB - minutesA; // Reverse for newest first
+          }
+          
+          return dateB - dateA; // Reverse for newest first
+        };
+        
         pendingProposals.sort(sortByDate);
-        completedProposals.sort(sortByDate);
+        completedProposals.sort(sortCompletedByDate);
         cancelledJobs.sort(sortCancelledByDate);
         
-        setProposals({ pending: pendingProposals, completed: completedProposals, cancelled: cancelledJobs });
+        // Use review info from backend (already included in proposal data via embedding)
+        const completedWithReviews = completedProposals.map((p) => ({
+          ...p,
+          hasReviewed: p.has_reviewed || false,
+          canReview: p.can_review || false
+        }));
+        
+        setProposals({ pending: pendingProposals, completed: completedWithReviews, cancelled: cancelledJobs });
       } catch (err) {
         console.error('Error fetching approval proposals:', err);
         toast.error('Failed to load proposals');
@@ -172,6 +191,50 @@ export default function Approval() {
         // Fetch post details
         const postResponse = await api.get(`/posts/${proposalData.post_id}/`);
         setPost(postResponse.data);
+
+        // Check if user can review and has reviewed
+        if (user) {
+          const isRequester = user.id === proposalData.requester_id;
+          const isProvider = user.id === proposalData.provider_id;
+          
+          if (isRequester || isProvider) {
+            // Check if user can review based on approval status
+            // For both offer and need: user can review if they have approved OR declined the job
+            // Check if user cancelled the job
+            const userCancelledJob = proposalData.job_status === 'cancelled' && 
+              ((isRequester && proposalData.job_cancelled_by_id === user.id) ||
+               (isProvider && proposalData.job_cancelled_by_id === user.id));
+            
+            let userCanReview = false;
+            if (isRequester) {
+              // Requester can review if requester has approved OR cancelled the job
+              userCanReview = proposalData.requester_approved || userCancelledJob;
+            } else if (isProvider) {
+              // Provider can review if provider has approved OR cancelled the job
+              userCanReview = proposalData.provider_approved || userCancelledJob;
+            }
+            
+            setCanReview(userCanReview);
+            
+            // Check if user has already reviewed
+            if (userCanReview) {
+              try {
+                const reviewResponse = await api.get('/reviews/', { 
+                  params: { proposal: proposalId, reviewer: user.id } 
+                });
+                const reviews = Array.isArray(reviewResponse.data) 
+                  ? reviewResponse.data 
+                  : (reviewResponse.data?.results || []);
+                setHasReviewed(reviews.length > 0);
+              } catch (err) {
+                console.error('Error checking review:', err);
+                setHasReviewed(false);
+              }
+            } else {
+              setHasReviewed(false);
+            }
+          }
+        }
       } catch (err) {
         console.error('Error fetching proposal:', err);
         setError('Failed to load proposal');
@@ -184,26 +247,6 @@ export default function Approval() {
     fetchProposal();
   }, [proposalId]);
 
-  // Fetch existing review for this proposal
-  useEffect(() => {
-    const fetchReview = async () => {
-      if (!proposalId || !user || !proposal) return;
-
-      try {
-        const response = await api.get('/reviews/', { params: { proposal: proposalId, reviewer: user.id } });
-        const reviews = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-        if (reviews.length > 0) {
-          setExistingReview(reviews[0]);
-        }
-      } catch (err) {
-        console.error('Error fetching review:', err);
-      }
-    };
-
-    if (proposal && (proposal.status === 'completed' || (proposal.provider_approved && proposal.requester_approved))) {
-      fetchReview();
-    }
-  }, [proposalId, user, proposal]);
 
   // Check if user can approve (after proposed date/time)
   const canApprove = () => {
@@ -309,8 +352,12 @@ export default function Approval() {
         } else {
           toast.success('You have approved the proposal. Event completed!');
         }
+        // Navigate to review page after both approved
+        navigate(`/review/${proposalId}`);
       } else {
         toast.success('You have approved the proposal');
+        // Navigate to review page after approval
+        navigate(`/review/${proposalId}`);
       }
     } catch (err) {
       console.error('Error approving proposal:', err);
@@ -327,27 +374,36 @@ export default function Approval() {
       setProcessing(true);
       await api.patch(`/proposals/${proposalId}/`, { requester_approved: true });
       
+      // Refresh proposal data first
+      const response = await api.get(`/proposals/${proposalId}/`);
+      setProposal(response.data);
+      
       // Get updated user profile to show balance change
       const userResponse = await api.get('/session/');
       const updatedBalance = userResponse.data?.profile?.time_balance || 0;
       
       // Determine who received balance based on post type
-      const isOffer = proposal.post?.post_type === 'offer' || proposal.post_type === 'offer';
+      const isOffer = response.data.post_type === 'offer';
       const isCurrentUser = isOffer 
-        ? user?.id === proposal.provider_id 
-        : user?.id === proposal.requester_id;
+        ? user?.id === response.data.provider_id 
+        : user?.id === response.data.requester_id;
       
-      if (isCurrentUser) {
-        toast.success(
-          `Event completed! ${proposal.timebank_hour} hours added to your balance. New balance: ${updatedBalance} hours.`
-        );
+      // Check if both approved (completed)
+      if (response.data.provider_approved && response.data.requester_approved) {
+        if (isCurrentUser) {
+          toast.success(
+            `Event completed! ${response.data.timebank_hour} hours added to your balance. New balance: ${updatedBalance} hours.`
+          );
+        } else {
+          toast.success('You have approved the proposal. Event completed!');
+        }
+        // Navigate to review page after both approved
+        navigate(`/review/${proposalId}`);
       } else {
-        toast.success('You have approved the proposal. Event completed!');
+        toast.success('You have approved the proposal');
+        // Navigate to review page after approval
+        navigate(`/review/${proposalId}`);
       }
-      
-      // Refresh proposal data
-      const response = await api.get(`/proposals/${proposalId}/`);
-      setProposal(response.data);
       
       // Refresh user data
       if (user) {
@@ -364,47 +420,6 @@ export default function Approval() {
     }
   };
 
-  // Check if current user should review
-  const shouldShowReviewForm = () => {
-    if (!proposal || !user || !post) return false;
-    
-    // Only show if proposal is completed
-    const isCompleted = proposal.status === 'completed' || (proposal.provider_approved && proposal.requester_approved);
-    if (!isCompleted) return false;
-    
-    // Check if user already reviewed
-    if (existingReview) return false;
-    
-    // Determine who should review based on post type
-    const isOffer = post.post_type === 'offer';
-    const isRequester = user.id === proposal.requester_id;
-    const isProvider = user.id === proposal.provider_id;
-    
-    // Offer: requester reviews provider
-    // Need: provider reviews requester
-    if (isOffer && isRequester) return true;
-    if (!isOffer && isProvider) return true;
-    
-    return false;
-  };
-
-  // Get user to review
-  const getUserToReview = () => {
-    if (!proposal || !post) return null;
-    
-    const isOffer = post.post_type === 'offer';
-    if (isOffer) {
-      return {
-        id: proposal.provider_id,
-        username: proposal.provider_username,
-      };
-    } else {
-      return {
-        id: proposal.requester_id,
-        username: proposal.requester_username,
-      };
-    }
-  };
 
   // Handle decline event
   const handleDeclineEvent = async () => {
@@ -460,7 +475,8 @@ export default function Approval() {
       // Store who cancelled this proposal in sessionStorage
       sessionStorage.setItem(`proposal_${proposalId}_cancelled_by`, user?.id?.toString() || '');
       
-      // Refresh proposal data
+      // Refresh proposal data - wait a bit to ensure job is saved
+      await new Promise(resolve => setTimeout(resolve, 500));
       const response = await api.get(`/proposals/${proposalId}/`);
       setProposal(response.data);
       
@@ -475,6 +491,9 @@ export default function Approval() {
       // Close dialog and reset
       setShowDeclineDialog(false);
       setDeclineReason('');
+      
+      // Navigate to review page after decline
+      navigate(`/review/${proposalId}`);
     } catch (err) {
       console.error('Error declining event:', err);
       toast.error(err.response?.data?.detail || 'Failed to decline event');
@@ -483,40 +502,6 @@ export default function Approval() {
     }
   };
 
-  // Handle review submission
-  const handleSubmitReview = async () => {
-    if (!proposal || !reviewData.friendliness || !reviewData.time_management || !reviewData.reliability || !reviewData.communication || !reviewData.work_quality) {
-      toast.error('Please rate all criteria');
-      return;
-    }
-
-    try {
-      setSubmittingReview(true);
-      await api.post('/reviews/', {
-        proposal: proposalId,
-        friendliness: reviewData.friendliness,
-        time_management: reviewData.time_management,
-        reliability: reviewData.reliability,
-        communication: reviewData.communication,
-        work_quality: reviewData.work_quality,
-        comment: reviewData.comment || '',
-      });
-      
-      toast.success('Review submitted successfully!');
-      
-      // Fetch updated review
-      const response = await api.get('/reviews/', { params: { proposal: proposalId, reviewer: user.id } });
-      const reviews = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-      if (reviews.length > 0) {
-        setExistingReview(reviews[0]);
-      }
-    } catch (err) {
-      console.error('Error submitting review:', err);
-      toast.error(err.response?.data?.detail || 'Failed to submit review');
-    } finally {
-      setSubmittingReview(false);
-    }
-  };
 
   // If no proposalId, show list of approval-waiting proposals
   if (!proposalId) {
@@ -591,8 +576,31 @@ export default function Approval() {
                 
                 const canApprove = () => {
                   if (!canApproveNow()) return false;
-                  if (isProvider) return !p.provider_approved;
-                  if (isRequester) return p.provider_approved && !p.requester_approved;
+                  
+                  const postType = p.post_type || p.post?.post_type;
+                  
+                  if (isProvider) {
+                    // Provider approval logic
+                    if (postType === 'offer') {
+                      // Offer: provider can approve first (no prerequisite)
+                      return !p.provider_approved;
+                    } else if (postType === 'need') {
+                      // Need: provider must wait for requester approval first
+                      return p.requester_approved && !p.provider_approved;
+                    }
+                  }
+                  
+                  if (isRequester) {
+                    // Requester approval logic
+                    if (postType === 'offer') {
+                      // Offer: requester must wait for provider approval first
+                      return p.provider_approved && !p.requester_approved;
+                    } else if (postType === 'need') {
+                      // Need: requester can approve first (no prerequisite)
+                      return !p.requester_approved;
+                    }
+                  }
+                  
                   return false;
                 };
 
@@ -671,11 +679,29 @@ export default function Approval() {
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Completed Approvals</h3>
               <div className="space-y-4">
                 {proposals.completed.map((p) => {
+                  const isRequester = user?.id === p.requester_id;
+                  const isProvider = user?.id === p.provider_id;
+                  // Check if user can review based on approval status
+                  // For both offer and need: user can review if they have approved OR declined the job
+                  // Calculate canReview from proposal data
+                  let canReview = false;
+                  const userCancelledJob = p.job_status === 'cancelled' && 
+                    ((isRequester && p.job_cancelled_by_id === user?.id) ||
+                     (isProvider && p.job_cancelled_by_id === user?.id));
+                  
+                  if (isRequester) {
+                    canReview = p.requester_approved || userCancelledJob;
+                  } else if (isProvider) {
+                    canReview = p.provider_approved || userCancelledJob;
+                  }
+                  
+                  // Check if reviewed (only if canReview is true to avoid unnecessary API calls)
+                  const hasReviewed = p.hasReviewed || false;
+                  
                   return (
                     <Card 
                       key={p.id} 
-                      className="shadow-md border-green-200 bg-green-50 hover:shadow-lg transition-shadow cursor-pointer"
-                      onClick={() => navigate(`/approval/${p.id}`)}
+                      className="shadow-md border-green-200 bg-green-50 hover:shadow-lg transition-shadow"
                     >
                       <CardContent className="pt-6">
                         <div className="flex items-start justify-between">
@@ -712,17 +738,38 @@ export default function Approval() {
                               <Badge className="bg-green-600 text-white">
                                 Completed
                               </Badge>
+                              {hasReviewed && (
+                                <Badge variant="secondary" className="bg-gray-200 text-gray-700">
+                                  Reviewed
+                                </Badge>
+                              )}
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/approval/${p.id}`);
-                            }}
-                          >
-                            View Details
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            {canReview && (
+                              <Button
+                                variant="default"
+                                className="bg-primary hover:bg-primary/90 text-white"
+                                disabled={hasReviewed}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/review/${p.id}`);
+                                }}
+                              >
+                                <Star className="w-4 h-4 mr-2" />
+                                {hasReviewed ? 'Reviewed' : 'Review'}
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/approval/${p.id}`);
+                              }}
+                            >
+                              View Details
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -785,14 +832,69 @@ export default function Approval() {
                                 Cancelled
                               </Badge>
                             </div>
-                            <div className="space-y-1 mt-2">
-                              <p className="text-sm text-red-700">
-                                {isCurrentUserCancelled
-                                  ? "You have cancelled this event."
-                                  : p.job_cancelled_by_username
-                                    ? `Cancelled by ${p.job_cancelled_by_username}`
-                                    : "This event has been cancelled."}
-                              </p>
+                            <div className="space-y-3 mt-2">
+                              {/* Post Owner and Requester Info */}
+                              <div className="flex items-center gap-4">
+                                <div 
+                                  className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/profile/${p.provider_id}`);
+                                  }}
+                                >
+                                  <SimpleAvatar 
+                                    src={p.provider_avatar || `https://placehold.co/40x40/EBF8FF/3B82F6?text=${p.provider_username?.charAt(0) || 'P'}`}
+                                    fallback={p.provider_username?.charAt(0) || 'P'}
+                                    className="h-8 w-8"
+                                  />
+                                  <div>
+                                    <p className="text-xs text-gray-500">Post Owner</p>
+                                    <p className="text-sm font-medium text-slate-900">{p.provider_username}</p>
+                                  </div>
+                                </div>
+                                <div 
+                                  className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/profile/${p.requester_id}`);
+                                  }}
+                                >
+                                  <SimpleAvatar 
+                                    src={p.requester_avatar || `https://placehold.co/40x40/EBF8FF/3B82F6?text=${p.requester_username?.charAt(0) || 'R'}`}
+                                    fallback={p.requester_username?.charAt(0) || 'R'}
+                                    className="h-8 w-8"
+                                  />
+                                  <div>
+                                    <p className="text-xs text-gray-500">Requester</p>
+                                    <p className="text-sm font-medium text-slate-900">{p.requester_username}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Cancelled By Info */}
+                              <div className="flex items-center gap-2 pt-2 border-t border-red-200">
+                                <XCircle className="w-4 h-4 text-red-600" />
+                                <p className="text-sm text-red-700">
+                                  {isCurrentUserCancelled
+                                    ? "You have cancelled this event."
+                                    : p.job_cancelled_by_username
+                                      ? (
+                                          <span>
+                                            Cancelled by{' '}
+                                            <span 
+                                              className="font-medium cursor-pointer hover:underline"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate(`/profile/${p.job_cancelled_by_id}`);
+                                              }}
+                                            >
+                                              {p.job_cancelled_by_username}
+                                            </span>
+                                          </span>
+                                        )
+                                      : "This event has been cancelled."}
+                                </p>
+                              </div>
                               {p.job_cancellation_reason && (
                                 <p className="text-xs text-red-600">
                                   <span className="font-medium">Reason: </span>
@@ -1065,230 +1167,26 @@ export default function Approval() {
           </CardContent>
         </Card>
 
-        {/* Review Section - Show after completion */}
-        {shouldShowReviewForm() && (
+        {/* Review Button - Show if user can review (even if not both approved) */}
+        {proposal.status === 'accepted' && canReview && (
           <Card className="shadow-md border-primary/20">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Star className="w-5 h-5 text-primary" />
-                Review{' '}
-                <span 
-                  className="cursor-pointer hover:text-primary transition-colors"
-                  onClick={() => getUserToReview() && navigate(`/profile/${getUserToReview().username}`)}
-                >
-                  {getUserToReview()?.username}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <p className="text-sm text-muted-foreground">
-                Please rate your experience with{' '}
-                <span 
-                  className="cursor-pointer hover:text-primary transition-colors font-medium"
-                  onClick={() => getUserToReview() && navigate(`/profile/${getUserToReview().username}`)}
-                >
-                  {getUserToReview()?.username}
-                </span>{' '}
-                on the following criteria:
-              </p>
-              
-              {/* Friendliness */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Smile className="w-4 h-4 text-primary" />
-                  <label className="text-sm font-medium">Friendliness</label>
-                </div>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <button
-                      key={rating}
-                      type="button"
-                      onClick={() => setReviewData({ ...reviewData, friendliness: rating })}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                        reviewData.friendliness === rating
-                          ? 'bg-primary text-white border-primary'
-                          : 'border-gray-300 hover:border-primary/50'
-                      }`}
-                    >
-                      {rating}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Time Management */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Timer className="w-4 h-4 text-primary" />
-                  <label className="text-sm font-medium">Time Management</label>
-                </div>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <button
-                      key={rating}
-                      type="button"
-                      onClick={() => setReviewData({ ...reviewData, time_management: rating })}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                        reviewData.time_management === rating
-                          ? 'bg-primary text-white border-primary'
-                          : 'border-gray-300 hover:border-primary/50'
-                      }`}
-                    >
-                      {rating}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Reliability */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-primary" />
-                  <label className="text-sm font-medium">Reliability</label>
-                </div>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <button
-                      key={rating}
-                      type="button"
-                      onClick={() => setReviewData({ ...reviewData, reliability: rating })}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                        reviewData.reliability === rating
-                          ? 'bg-primary text-white border-primary'
-                          : 'border-gray-300 hover:border-primary/50'
-                      }`}
-                    >
-                      {rating}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Communication */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-primary" />
-                  <label className="text-sm font-medium">Communication</label>
-                </div>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <button
-                      key={rating}
-                      type="button"
-                      onClick={() => setReviewData({ ...reviewData, communication: rating })}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                        reviewData.communication === rating
-                          ? 'bg-primary text-white border-primary'
-                          : 'border-gray-300 hover:border-primary/50'
-                      }`}
-                    >
-                      {rating}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Work Quality */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Award className="w-4 h-4 text-primary" />
-                  <label className="text-sm font-medium">Work Quality</label>
-                </div>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <button
-                      key={rating}
-                      type="button"
-                      onClick={() => setReviewData({ ...reviewData, work_quality: rating })}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                        reviewData.work_quality === rating
-                          ? 'bg-primary text-white border-primary'
-                          : 'border-gray-300 hover:border-primary/50'
-                      }`}
-                    >
-                      {rating}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Comment */}
-              <div className="space-y-2">
-                <Label htmlFor="review-comment" className="text-sm font-medium">
-                  Comment (Optional)
-                </Label>
-                <Textarea
-                  id="review-comment"
-                  placeholder="Share your experience with this user..."
-                  value={reviewData.comment}
-                  onChange={(e) => setReviewData({ ...reviewData, comment: e.target.value })}
-                  className="min-h-[100px]"
-                  rows={4}
-                />
-              </div>
-
-              <Button
-                onClick={handleSubmitReview}
-                disabled={submittingReview || !reviewData.friendliness || !reviewData.time_management || !reviewData.reliability || !reviewData.communication || !reviewData.work_quality}
-                className="w-full bg-primary hover:bg-primary/90"
-                size="lg"
-              >
-                {submittingReview ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Star className="w-4 h-4 mr-2" />
-                    Submit Review
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Review Submitted Message */}
-        {existingReview && (
-          <Card className="shadow-md border-green-200 bg-green-50">
             <CardContent className="pt-6">
-              <div className="text-center py-4">
-                <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
-                <p className="text-lg font-semibold text-green-900 mb-2">
-                  Review Submitted
+              <div className="text-center py-8">
+                <p className="text-lg font-semibold mb-4">Review</p>
+                <p className="text-sm text-muted-foreground mb-6">
+                  {isRequester 
+                    ? 'You can now review the provider.'
+                    : 'You can now review the requester.'}
                 </p>
-                <p className="text-sm text-green-700 mb-4">
-                  You have already reviewed this event.
-                </p>
-                <div className="flex flex-wrap justify-center gap-4 text-sm text-green-800">
-                  <div className="flex items-center gap-1">
-                    <Smile className="w-4 h-4" />
-                    <span>Friendliness: {existingReview.friendliness}/5</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Timer className="w-4 h-4" />
-                    <span>Time Management: {existingReview.time_management}/5</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Shield className="w-4 h-4" />
-                    <span>Reliability: {existingReview.reliability}/5</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Communication: {existingReview.communication}/5</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Award className="w-4 h-4" />
-                    <span>Work Quality: {existingReview.work_quality}/5</span>
-                  </div>
-                </div>
-                {existingReview.comment && (
-                  <div className="mt-4 pt-4 border-t border-green-300">
-                    <p className="text-sm font-medium text-green-900 mb-2">Your Comment:</p>
-                    <p className="text-sm text-green-800 whitespace-pre-wrap">{existingReview.comment}</p>
-                  </div>
-                )}
+                <Button
+                  variant="default"
+                  className="bg-primary hover:bg-primary/90 text-white"
+                  disabled={hasReviewed}
+                  onClick={() => navigate(`/review/${proposalId}`)}
+                >
+                  <Star className="w-4 h-4 mr-2" />
+                  {hasReviewed ? 'Reviewed' : 'Review'}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -1296,21 +1194,31 @@ export default function Approval() {
 
         {/* Approval Action */}
         {proposal.status === 'completed' || (proposal.provider_approved && proposal.requester_approved) ? (
-          !shouldShowReviewForm() && !existingReview && (
-            <Card className="shadow-md border-green-200 bg-green-50">
-              <CardContent className="pt-6">
-                <div className="text-center py-8">
-                  <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-                  <p className="text-lg font-semibold text-green-900 mb-2">
-                    Event Completed
-                  </p>
-                  <p className="text-sm text-green-700">
-                    Both parties have approved this event. The event is now marked as completed.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )
+          <Card className="shadow-md border-green-200 bg-green-50">
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                <p className="text-lg font-semibold text-green-900 mb-2">
+                  Event Completed
+                </p>
+                <p className="text-sm text-green-700 mb-6">
+                  Both parties have approved this event. The event is now marked as completed.
+                </p>
+                {/* Review Button */}
+                {canReview && (
+                  <Button
+                    variant="default"
+                    className="bg-primary hover:bg-primary/90 text-white"
+                    disabled={hasReviewed}
+                    onClick={() => navigate(`/review/${proposalId}`)}
+                  >
+                    <Star className="w-4 h-4 mr-2" />
+                    {hasReviewed ? 'Reviewed' : 'Review'}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         ) : (
           <>
             {isProvider && canProviderApprove() && (
