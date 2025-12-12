@@ -72,9 +72,8 @@ export default function MyProfile() {
         }
         
         // STEP 2: Fetch full profile data (time_balance already shown from context)
-        // Don't include reviews in initial load - they're not critical for wallet display
-        // Review averages will be loaded separately if needed
-        const response = await api.get('/users/me/');
+        // Include review_averages for Community Ratings display
+        const response = await api.get('/users/me/', { params: { include_reviews: 'true' } });
         const userData = response.data;
         
         const data = {
@@ -100,10 +99,24 @@ export default function MyProfile() {
           interested_tags_from_backend: data.interested_tags,
           interested_tags_type: typeof data.interested_tags,
           is_array: Array.isArray(data.interested_tags),
-          length: data.interested_tags?.length
+          length: data.interested_tags?.length,
+          review_averages: data.review_averages,
+          review_averages_from_backend: userData.profile?.review_averages,
+          profile_data: userData.profile
         });
         
         setFormData(data);
+        
+        // Update AuthContext user state with latest time_balance so Header.jsx also updates
+        if (setUser && userData.profile?.time_balance !== undefined) {
+          setUser(prevUser => ({
+            ...prevUser,
+            profile: {
+              ...prevUser?.profile,
+              time_balance: userData.profile.time_balance
+            }
+          }));
+        }
         setProfilePhotoData({ avatar: data.avatar });
         setPersonalInfoData({ 
           firstName: data.firstName, 
@@ -190,12 +203,23 @@ export default function MyProfile() {
         ...prev,
         time_balance: timeBalance
       }));
+      
+      // Update AuthContext user state so Header.jsx also updates
+      if (setUser) {
+        setUser(prevUser => ({
+          ...prevUser,
+          profile: {
+            ...prevUser?.profile,
+            time_balance: timeBalance
+          }
+        }));
+      }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [user]);
+  }, [user, setUser]);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -983,7 +1007,7 @@ export default function MyProfile() {
                   {/* Overall Rating - Larger */}
                   <div className="space-y-3 text-center pb-3 border-b border-primary/20">
                     <div className="flex items-center justify-center gap-2">
-                      <span className="text-3xl font-bold text-primary">
+                      <span className="text-2xl font-bold text-primary">
                         {formData.review_averages.overall.toFixed(1)}
                       </span>
                       <span className="text-2xl text-slate-500">/5</span>
