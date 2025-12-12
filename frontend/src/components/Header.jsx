@@ -34,6 +34,8 @@ export function Header() {
   const [receivedProposals, setReceivedProposals] = useState([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [visibleSentCount, setVisibleSentCount] = useState(3);
+  const [visibleReceivedCount, setVisibleReceivedCount] = useState(3);
 
   // Debug: Check user admin status
   useEffect(() => {
@@ -108,6 +110,9 @@ export function Header() {
     setShowMenu(false);
     if (!showProposals) {
       fetchProposals();
+      // Reset visible counts when opening drawer
+      setVisibleSentCount(3);
+      setVisibleReceivedCount(3);
     }
   };
 
@@ -448,82 +453,93 @@ export function Header() {
                             </CardContent>
                           </Card>
                         ) : (
-                          <div className="space-y-3">
-                            {sentProposals.map((proposal) => (
-                              <Card 
-                                key={proposal.id} 
-                                className="hover:shadow-md transition-shadow cursor-pointer"
-                                onClick={() => {
-                                  navigate(`/negotiate/${proposal.post_id}`);
-                                  setShowProposals(false);
-                                }}
-                              >
-                                <CardContent className="p-4">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1">
-                                      <h4 className="font-semibold text-sm text-gray-900 mb-1">
-                                        {proposal.post_title}
-                                      </h4>
-                                    </div>
-                                    <Badge
-                                      variant={
-                                        proposal.status === 'completed'
-                                          ? 'default'
+                          <>
+                            <div className="space-y-3">
+                              {sentProposals.slice(0, visibleSentCount).map((proposal) => (
+                                <Card 
+                                  key={proposal.id} 
+                                  className="hover:shadow-md transition-shadow cursor-pointer"
+                                  onClick={() => {
+                                    navigate(`/negotiate/${proposal.post_id}`);
+                                    setShowProposals(false);
+                                  }}
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div className="flex-1">
+                                        <h4 className="font-semibold text-sm text-gray-900 mb-1">
+                                          {proposal.post_title}
+                                        </h4>
+                                      </div>
+                                      <Badge
+                                        variant={
+                                          proposal.status === 'completed'
+                                            ? 'default'
+                                            : proposal.status === 'accepted'
+                                            ? 'default'
+                                            : proposal.status === 'declined'
+                                            ? 'destructive'
+                                            : proposal.status === 'cancelled'
+                                            ? 'destructive'
+                                            : 'secondary'
+                                        }
+                                        className={
+                                          proposal.status === 'completed'
+                                            ? 'bg-blue-600 text-white'
+                                            : proposal.status === 'accepted'
+                                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                                            : proposal.status === 'cancelled'
+                                            ? 'bg-red-600 text-white'
+                                            : ''
+                                        }
+                                      >
+                                        {proposal.status === 'completed'
+                                          ? 'Completed'
                                           : proposal.status === 'accepted'
-                                          ? 'default'
+                                          ? 'Accepted'
                                           : proposal.status === 'declined'
-                                          ? 'destructive'
+                                          ? 'Declined'
                                           : proposal.status === 'cancelled'
-                                          ? 'destructive'
-                                          : 'secondary'
-                                      }
-                                      className={
-                                        proposal.status === 'completed'
-                                          ? 'bg-blue-600 text-white'
-                                          : proposal.status === 'accepted'
-                                          ? 'bg-green-600 hover:bg-green-700 text-white'
-                                          : proposal.status === 'cancelled'
-                                          ? 'bg-red-600 text-white'
-                                          : ''
-                                      }
-                                    >
-                                      {proposal.status === 'completed'
-                                        ? 'Completed'
-                                        : proposal.status === 'accepted'
-                                        ? 'Accepted'
-                                        : proposal.status === 'declined'
-                                        ? 'Declined'
-                                        : proposal.status === 'cancelled'
-                                        ? 'Cancelled'
-                                        : 'Waiting'}
-                                    </Badge>
-                                  </div>
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                                      <span className="flex items-center gap-1">
-                                        <MapPin className="w-3 h-3" />
-                                        {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
-                                      </span>
-                                      {proposal.proposed_date && (
+                                          ? 'Cancelled'
+                                          : 'Waiting'}
+                                      </Badge>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-4 text-xs text-gray-500">
                                         <span className="flex items-center gap-1">
-                                          <Calendar className="w-3 h-3" />
-                                          {new Date(proposal.proposed_date).toLocaleDateString()}
+                                          <MapPin className="w-3 h-3" />
+                                          {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
                                         </span>
+                                        {proposal.proposed_date && (
+                                          <span className="flex items-center gap-1">
+                                            <Calendar className="w-3 h-3" />
+                                            {new Date(proposal.proposed_date).toLocaleDateString()}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {proposal.notes && proposal.notes.includes('[Response from') && (
+                                        <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                                          <p className="font-medium text-blue-900 mb-1">Response:</p>
+                                          <p className="text-blue-800">
+                                            {proposal.notes.split('\n').find(line => line.includes('[Response from'))?.replace(/\[Response from .+?\]:\s*/, '') || ''}
+                                          </p>
+                                        </div>
                                       )}
                                     </div>
-                                    {proposal.notes && proposal.notes.includes('[Response from') && (
-                                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
-                                        <p className="font-medium text-blue-900 mb-1">Response:</p>
-                                        <p className="text-blue-800">
-                                          {proposal.notes.split('\n').find(line => line.includes('[Response from'))?.replace(/\[Response from .+?\]:\s*/, '') || ''}
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                            {sentProposals.length > visibleSentCount && (
+                              <Button
+                                variant="outline"
+                                className="w-full mt-3"
+                                onClick={() => setVisibleSentCount(prev => prev + 3)}
+                              >
+                                Show More ({sentProposals.length - visibleSentCount} more)
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -541,75 +557,86 @@ export function Header() {
                             </CardContent>
                           </Card>
                         ) : (
-                          <div className="space-y-3">
-                            {receivedProposals.map((proposal) => (
-                              <Card 
-                                key={proposal.id} 
-                                className="hover:shadow-md transition-shadow cursor-pointer"
-                                onClick={() => {
-                                  navigate(`/proposal-review/${proposal.id}`);
-                                  setShowProposals(false);
-                                }}
-                              >
-                                <CardContent className="p-4">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1">
-                                      <h4 className="font-semibold text-sm text-gray-900 mb-1">
-                                        {proposal.post_title}
-                                      </h4>
-                                      <span className="text-xs text-gray-500">
-                                        from {proposal.requester_username}
-                                      </span>
-                                    </div>
-                                    <Badge
-                                      variant={
-                                        proposal.status === 'completed'
-                                          ? 'default'
+                          <>
+                            <div className="space-y-3">
+                              {receivedProposals.slice(0, visibleReceivedCount).map((proposal) => (
+                                <Card 
+                                  key={proposal.id} 
+                                  className="hover:shadow-md transition-shadow cursor-pointer"
+                                  onClick={() => {
+                                    navigate(`/proposal-review/${proposal.id}`);
+                                    setShowProposals(false);
+                                  }}
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div className="flex-1">
+                                        <h4 className="font-semibold text-sm text-gray-900 mb-1">
+                                          {proposal.post_title}
+                                        </h4>
+                                        <span className="text-xs text-gray-500">
+                                          from {proposal.requester_username}
+                                        </span>
+                                      </div>
+                                      <Badge
+                                        variant={
+                                          proposal.status === 'completed'
+                                            ? 'default'
+                                            : proposal.status === 'accepted'
+                                            ? 'default'
+                                            : proposal.status === 'declined'
+                                            ? 'destructive'
+                                            : proposal.status === 'cancelled'
+                                            ? 'destructive'
+                                            : 'secondary'
+                                        }
+                                        className={
+                                          proposal.status === 'completed'
+                                            ? 'bg-blue-600 text-white'
+                                            : proposal.status === 'accepted'
+                                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                                            : proposal.status === 'cancelled'
+                                            ? 'bg-red-600 text-white'
+                                            : ''
+                                        }
+                                      >
+                                        {proposal.status === 'completed'
+                                          ? 'Completed'
                                           : proposal.status === 'accepted'
-                                          ? 'default'
+                                          ? 'Accepted'
                                           : proposal.status === 'declined'
-                                          ? 'destructive'
+                                          ? 'Declined'
                                           : proposal.status === 'cancelled'
-                                          ? 'destructive'
-                                          : 'secondary'
-                                      }
-                                      className={
-                                        proposal.status === 'completed'
-                                          ? 'bg-blue-600 text-white'
-                                          : proposal.status === 'accepted'
-                                          ? 'bg-green-600 hover:bg-green-700 text-white'
-                                          : proposal.status === 'cancelled'
-                                          ? 'bg-red-600 text-white'
-                                          : ''
-                                      }
-                                    >
-                                      {proposal.status === 'completed'
-                                        ? 'Completed'
-                                        : proposal.status === 'accepted'
-                                        ? 'Accepted'
-                                        : proposal.status === 'declined'
-                                        ? 'Declined'
-                                        : proposal.status === 'cancelled'
-                                        ? 'Cancelled'
-                                        : 'Waiting'}
-                                    </Badge>
-                                  </div>
-                                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                                    <span className="flex items-center gap-1">
-                                      <MapPin className="w-3 h-3" />
-                                      {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
-                                    </span>
-                                    {proposal.proposed_date && (
+                                          ? 'Cancelled'
+                                          : 'Waiting'}
+                                      </Badge>
+                                    </div>
+                                    <div className="flex items-center gap-4 text-xs text-gray-500">
                                       <span className="flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        {new Date(proposal.proposed_date).toLocaleDateString()}
+                                        <MapPin className="w-3 h-3" />
+                                        {proposal.notes?.split('\n').find(line => line.startsWith('Location:'))?.replace('Location:', '').trim() || 'N/A'}
                                       </span>
-                                    )}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
+                                      {proposal.proposed_date && (
+                                        <span className="flex items-center gap-1">
+                                          <Calendar className="w-3 h-3" />
+                                          {new Date(proposal.proposed_date).toLocaleDateString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                            {receivedProposals.length > visibleReceivedCount && (
+                              <Button
+                                variant="outline"
+                                className="w-full mt-3"
+                                onClick={() => setVisibleReceivedCount(prev => prev + 3)}
+                              >
+                                Show More ({receivedProposals.length - visibleReceivedCount} more)
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

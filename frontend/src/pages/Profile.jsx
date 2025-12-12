@@ -19,7 +19,6 @@ import {
   Award,
   Timer,
   Smile,
-  MessageCircle,
   Package,
   MessageSquare,
   Star,
@@ -499,36 +498,6 @@ export default function Profile() {
                   <p className="text-xs mt-1">Be the first to review this user!</p>
                 </div>
               )}
-              
-              {/* Send Message Button */}
-              {user && user.username !== profileData.username && (
-                <div className="mt-4 pt-4 border-t border-primary/20">
-                  <Button 
-                    className="w-full bg-primary hover:bg-primary/90 text-white"
-                    onClick={async () => {
-                      try {
-                        // Create or get existing chat with the profile user
-                        const response = await api.post('/chats/', {
-                          user_id: profileData.id
-                        });
-                        
-                        // Navigate to chat page with the chat ID
-                        navigate(`/chat?chatId=${response.data.id}`);
-                      } catch (err) {
-                        console.error('Error creating chat:', err);
-                        const errorMessage = err.response?.data?.error || err.message || 'Failed to create chat';
-                        toast.error(errorMessage);
-                        // If chat creation fails, still navigate to chat page
-                        // The user can manually start a conversation
-                        navigate('/chat');
-                      }
-                    }}
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Send Message
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
         </CardContent>
@@ -879,7 +848,17 @@ export default function Profile() {
                     <CardContent>
                       {review.post_title && (
                         <div className="mb-4 pb-4 border-b border-gray-200">
-                          <p className="text-sm text-muted-foreground mb-1">Post:</p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm text-muted-foreground">Post:</p>
+                            {review.post_type && review.role && (
+                              <Badge 
+                                variant="secondary" 
+                                className="text-xs capitalize"
+                              >
+                                {review.post_type === 'offer' ? 'Offer' : 'Need'} • Role: {review.role}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-base font-medium text-primary">
                             {review.post_title}
                           </p>

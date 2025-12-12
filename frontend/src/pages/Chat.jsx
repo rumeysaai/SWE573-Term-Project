@@ -188,6 +188,11 @@ export default function Chat() {
                           </span>
                         )}
                       </div>
+                      {chat.post_title && (
+                        <p className="text-xs text-gray-500 truncate mb-1">
+                          {chat.post_type === 'offer' ? 'Offer' : chat.post_type === 'need' ? 'Need' : 'Post'}: {chat.post_title}
+                        </p>
+                      )}
                       {chat.last_message ? (
                         <p className="text-sm text-gray-600 truncate">
                           {chat.last_message.content}
@@ -208,7 +213,17 @@ export default function Chat() {
       {/* Right Side - Chat Box */}
       <div className="flex-1 flex flex-col">
         {selectedChat ? (
-          <ChatBox chat={selectedChat} currentUser={user} />
+          <>
+            {/* Post Title above ChatBox */}
+            {selectedChat.post_title && (
+              <div className="bg-primary/5 border-b border-gray-200 px-4 py-2">
+                <p className="text-sm font-medium text-gray-700">
+                  {selectedChat.post_type === 'offer' ? 'Offer' : selectedChat.post_type === 'need' ? 'Need' : 'Post'}: <span className="text-primary">{selectedChat.post_title}</span>
+                </p>
+              </div>
+            )}
+            <ChatBox chat={selectedChat} currentUser={user} />
+          </>
         ) : (
           <div className="flex-1 flex items-center justify-center bg-gray-50">
             <div className="text-center text-gray-500">

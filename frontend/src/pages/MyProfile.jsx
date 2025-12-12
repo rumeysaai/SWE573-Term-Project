@@ -58,6 +58,18 @@ export default function MyProfile() {
     const fetchProfile = async () => {
       try {
         setLoading(true);
+        
+        // STEP 1: Use time_balance from user context if available (instant, no API call)
+        if (user?.profile?.time_balance !== undefined) {
+          setFormData(prev => ({
+            ...prev,
+            time_balance: user.profile.time_balance
+          }));
+        }
+        
+        // STEP 2: Fetch full profile data (time_balance already shown from context)
+        // Don't include reviews in initial load - they're not critical for wallet display
+        // Review averages will be loaded separately if needed
         const response = await api.get('/users/me/');
         const userData = response.data;
         
@@ -70,7 +82,7 @@ export default function MyProfile() {
           location: userData.profile?.location || '',
           bio: userData.profile?.bio || '',
           avatar: userData.profile?.avatar || '',
-          time_balance: userData.profile?.time_balance || 0,
+          time_balance: userData.profile?.time_balance || user?.profile?.time_balance || 0,
           interested_tags: userData.profile?.interested_tags || [],
           review_averages: userData.profile?.review_averages || null,
         };
@@ -94,10 +106,22 @@ export default function MyProfile() {
         setLocationInput(data.location || '');
         
         // Convert tag IDs to TagSelector format for display
+        // Use tag details from backend if available (optimized - no extra API call)
         let tagSelectorTags = [];
-        if (data.interested_tags && Array.isArray(data.interested_tags) && data.interested_tags.length > 0) {
-          console.log('MyProfile: Fetching tag details for', data.interested_tags.length, 'tags');
-          // Fetch tag details for each ID
+        if (userData.profile?.interested_tags_details && Array.isArray(userData.profile.interested_tags_details) && userData.profile.interested_tags_details.length > 0) {
+          // Backend already sent tag details - use them directly (FAST!)
+          tagSelectorTags = userData.profile.interested_tags_details.map(tag => ({
+            id: tag.id,
+            name: tag.name || tag.label,
+            label: tag.label || tag.name,
+            wikidata_id: tag.wikidata_id,
+            description: tag.description,
+            is_custom: tag.is_custom
+          }));
+          console.log('MyProfile: Using tag details from backend (optimized):', tagSelectorTags.length, 'tags');
+        } else if (data.interested_tags && Array.isArray(data.interested_tags) && data.interested_tags.length > 0) {
+          // Fallback: Fetch tag details if backend didn't send them (shouldn't happen with new code)
+          console.log('MyProfile: Fallback - Fetching tag details for', data.interested_tags.length, 'tags');
           try {
             const tagsResponse = await api.get('/tags/');
             let allTagsData = [];
@@ -107,12 +131,8 @@ export default function MyProfile() {
               allTagsData = tagsResponse.data.results || [];
             }
             
-            console.log('MyProfile: Fetched', allTagsData.length, 'total tags from API');
-            console.log('MyProfile: Looking for tag IDs:', data.interested_tags);
-            
             // Map tag IDs to TagSelector format
             tagSelectorTags = data.interested_tags.map(tagId => {
-              // Handle both number and string IDs
               const tag = allTagsData.find(t => {
                 const tId = typeof t.id === 'string' ? parseInt(t.id, 10) : t.id;
                 const searchId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
@@ -120,7 +140,6 @@ export default function MyProfile() {
               });
               
               if (tag) {
-                console.log('MyProfile: Found tag:', tag.id, tag.name || tag.label);
                 return {
                   id: tag.id,
                   name: tag.name || tag.label,
@@ -129,13 +148,9 @@ export default function MyProfile() {
                   description: tag.description,
                   is_custom: tag.is_custom
                 };
-              } else {
-                console.warn('MyProfile: Tag not found for ID:', tagId);
               }
               return null;
             }).filter(Boolean);
-            
-            console.log('MyProfile: Converted to TagSelector format:', tagSelectorTags.length, 'tags', tagSelectorTags);
           } catch (error) {
             console.error('Error fetching tags for display:', error);
           }
@@ -432,21 +447,13 @@ export default function MyProfile() {
   const fetchBalanceHistory = async () => {
     try {
       setLoadingHistory(true);
-      // Fetch all proposals where user is either requester or provider
-      const [sentResponse, receivedResponse] = await Promise.all([
-        api.get('/proposals/?sent=true'),
-        api.get('/proposals/?received=true'),
-      ]);
+      // Use optimized endpoint that fetches both sent and received proposals in a single call
+      const response = await api.get('/proposals/for-approval/', {
+        params: { page_size: 200 } // Get more proposals for history
+      });
 
-      // Handle both array and paginated response formats
-      const sentProposals = Array.isArray(sentResponse.data) 
-        ? sentResponse.data 
-        : (sentResponse.data?.results || []);
-      const receivedProposals = Array.isArray(receivedResponse.data) 
-        ? receivedResponse.data 
-        : (receivedResponse.data?.results || []);
-      
-      const allProposals = [...sentProposals, ...receivedProposals];
+      // Handle paginated response
+      const allProposals = response.data.results || [];
 
       // Remove duplicates by ID
       const uniqueProposals = Array.from(

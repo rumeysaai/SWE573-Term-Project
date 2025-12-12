@@ -19,13 +19,28 @@ class Profile(models.Model):
     phone = models.CharField(max_length=20, blank=True, null=True)
     location = models.CharField(max_length=200, blank=True, null=True)
     interested_tags = models.ManyToManyField('Tag', blank=True, related_name='interested_profiles')
+    
+    @property
+    def avatar_url(self):
+        """Return avatar URL - already stored as full URL in TextField"""
+        return self.avatar if self.avatar else "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"
 
     def get_review_averages(self):
-        """Calculate average ratings from all reviews received by this user"""
-        from django.db.models import Avg
-        reviews = Review.objects.filter(reviewed_user=self.user)
+        """Calculate average ratings from all reviews received by this user - optimized"""
+        from django.db.models import Avg, Count
+        # Use aggregate directly without exists() check - more efficient
+        averages = Review.objects.filter(reviewed_user=self.user).aggregate(
+            avg_friendliness=Avg('friendliness'),
+            avg_time_management=Avg('time_management'),
+            avg_reliability=Avg('reliability'),
+            avg_communication=Avg('communication'),
+            avg_work_quality=Avg('work_quality'),
+            total_count=Count('id')
+        )
         
-        if not reviews.exists():
+        total_reviews = averages['total_count'] or 0
+        
+        if total_reviews == 0:
             return {
                 'friendliness': 0,
                 'time_management': 0,
@@ -35,14 +50,6 @@ class Profile(models.Model):
                 'overall': 0,
                 'total_reviews': 0,
             }
-        
-        averages = reviews.aggregate(
-            avg_friendliness=Avg('friendliness'),
-            avg_time_management=Avg('time_management'),
-            avg_reliability=Avg('reliability'),
-            avg_communication=Avg('communication'),
-            avg_work_quality=Avg('work_quality'),
-        )
         
         overall = (
             (averages['avg_friendliness'] or 0) +
@@ -59,7 +66,7 @@ class Profile(models.Model):
             'communication': round(averages['avg_communication'] or 0, 2),
             'work_quality': round(averages['avg_work_quality'] or 0, 2),
             'overall': round(overall, 2),
-            'total_reviews': reviews.count(),
+            'total_reviews': total_reviews,
         }
 
     def __str__(self):
@@ -176,13 +183,13 @@ class Proposal(models.Model):
         ('cancelled', 'Cancelled'),
     ]
 
-    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='proposals')
-    requester = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_proposals')
-    provider = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_proposals')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='proposals', db_index=True)
+    requester = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_proposals', db_index=True)
+    provider = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_proposals', db_index=True)
     
     notes = models.TextField(blank=True, null=True)
     timebank_hour = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting', db_index=True)
     proposed_date = models.DateField(blank=True, null=True)
     proposed_time = models.TimeField(blank=True, null=True)
     proposed_location = models.CharField(max_length=255, blank=True, null=True)
@@ -196,6 +203,12 @@ class Proposal(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['requester', 'status']),
+            models.Index(fields=['provider', 'status']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['requester', 'provider']),
+        ]
 
     def save(self, *args, **kwargs):
         """Handle proposal status changes and related operations"""
@@ -414,15 +427,16 @@ class Chat(models.Model):
     """1-on-1 Chat model between two users"""
     participant1 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chats_as_p1')
     participant2 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chats_as_p2')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='chats', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-updated_at']
-        unique_together = ['participant1', 'participant2']  # One chat per pair of users
+        unique_together = ['participant1', 'participant2', 'post']  # One chat per pair of users per post
 
     def __str__(self):
-        return f"Chat between {self.participant1.username} and {self.participant2.username}"
+        return f"Chat between {self.participant1.username} and {self.participant2.username} for post {self.post.id if self.post else 'N/A'}"
 
 
 class Message(models.Model):
