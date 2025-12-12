@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import api from '../api';
+import notificationService from '../services/notificationService';
 import {
   Bell,
   MessageCircle,
@@ -135,25 +136,36 @@ export function Header() {
     }
   }, [user]);
 
-  // Fetch unread count on mount and periodically
+  // Fetch unread count on mount
+  // Note: Real-time updates are now handled by notificationService in App.jsx
   useEffect(() => {
     if (!user) return;
     
     fetchUnreadCount();
     
-    // Refresh unread count every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
+    // Subscribe to message updates from notification service
+    const unsubscribe = notificationService.onMessageUpdate((unreadCount) => {
+      setUnreadMessageCount(unreadCount);
+    });
     
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribe();
+    };
   }, [user, fetchUnreadCount]);
 
-  // Fetch proposals on mount and listen for updates
+  // Fetch proposals on mount and subscribe to updates
   useEffect(() => {
     if (!user) return;
     
     // Fetch proposals on mount
     fetchProposals();
     
+    // Subscribe to proposal updates from notification service
+    const unsubscribeProposals = notificationService.onProposalUpdate(() => {
+      fetchProposals();
+    });
+    
+    // Listen for custom events (for backward compatibility)
     const handleProposalUpdate = () => {
       fetchProposals();
     };
@@ -164,7 +176,9 @@ export function Header() {
     
     window.addEventListener('proposalUpdated', handleProposalUpdate);
     window.addEventListener('messageUpdated', handleMessageUpdate);
+    
     return () => {
+      unsubscribeProposals();
       window.removeEventListener('proposalUpdated', handleProposalUpdate);
       window.removeEventListener('messageUpdated', handleMessageUpdate);
     };
