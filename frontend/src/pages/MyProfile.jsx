@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../api';
 import { useAuth } from '../App';
 import { toast } from 'sonner';
+import notificationService from '../services/notificationService';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -171,6 +172,22 @@ export default function MyProfile() {
 
     fetchProfile();
   }, []);
+
+  // Subscribe to time balance updates
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = notificationService.onTimeBalanceUpdate((timeBalance) => {
+      setFormData(prev => ({
+        ...prev,
+        time_balance: timeBalance
+      }));
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user]);
 
   // Close suggestions when clicking outside
   useEffect(() => {

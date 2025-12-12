@@ -4,6 +4,7 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import api from './api'; 
 import { Toaster } from 'sonner';
+import notificationService from './services/notificationService';
 
 import Welcome from './pages/Welcome';
 import Home from './pages/Home';
@@ -124,6 +125,27 @@ export default function App() {
 
     initializeApp();
   }, []);
+
+  // Start/stop notification polling when user changes
+  useEffect(() => {
+    if (user) {
+      // Reset counters and start polling
+      notificationService.reset();
+      notificationService.start(user, {
+        proposalInterval: 30000, // Check proposals every 30 seconds
+        messageInterval: 20000,  // Check messages every 20 seconds
+        timeBalanceInterval: 30000, // Check time balance every 30 seconds
+      });
+    } else {
+      // Stop polling when user logs out
+      notificationService.stop();
+    }
+
+    // Cleanup on unmount or user change
+    return () => {
+      notificationService.stop();
+    };
+  }, [user]);
 
 
   const login = async (username, password) => {
