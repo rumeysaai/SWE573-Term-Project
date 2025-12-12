@@ -282,8 +282,17 @@ class UserProfileView(APIView):
     def get(self, request, username, *args, **kwargs):
         try:
             user = User.objects.get(username=username)
-            # Use UserSerializer to get profile data including review_averages
-            serializer = UserSerializer(user)
+            # Use UserSerializer with request context and include_reviews=true to get review_averages
+            # Create a modified request with include_reviews=true parameter
+            class ModifiedRequest:
+                def __init__(self, original_request):
+                    # Copy query_params and add include_reviews=true
+                    self.query_params = original_request.query_params.copy()
+                    self.query_params['include_reviews'] = 'true'
+                    self.user = original_request.user
+            
+            modified_request = ModifiedRequest(request)
+            serializer = UserSerializer(user, context={'request': modified_request})
             user_data = serializer.data
             # Add first_name and last_name to response (public data)
             user_data['first_name'] = user.first_name
@@ -295,10 +304,16 @@ class UserProfileView(APIView):
             reviews_data = ReviewSerializer(reviews, many=True).data
             user_data['reviews'] = reviews_data
             
-            # Ensure profile data structure is correct
+            # Ensure profile data structure is correct and review_averages is included
             if 'profile' in user_data:
-                # Profile data is already included from UserSerializer with review_averages
-                pass
+                # If review_averages is None, calculate it manually
+                if user_data['profile'].get('review_averages') is None:
+                    profile = user.profile if hasattr(user, 'profile') else None
+                    if profile:
+                        try:
+                            user_data['profile']['review_averages'] = profile.get_review_averages()
+                        except Exception:
+                            user_data['profile']['review_averages'] = None
             else:
                 # Fallback: manually add profile data if serializer doesn't include it
                 profile = user.profile if hasattr(user, 'profile') else None
@@ -339,7 +354,15 @@ class MyProfileView(APIView):
         
         # Pass request context to serializer for conditional review_averages loading
         serializer = UserSerializer(user, context={'request': request})
-        return Response(serializer.data)
+        user_data = serializer.data
+        
+        # Fetch reviews received by this user (same as UserProfileView)
+        from .models import Review
+        reviews = Review.objects.filter(reviewed_user=user).select_related('reviewer', 'proposal', 'proposal__post').order_by('-created_at')
+        reviews_data = ReviewSerializer(reviews, many=True).data
+        user_data['reviews'] = reviews_data
+        
+        return Response(user_data)
 
     def put(self, request, *args, **kwargs):
         """Edit own profile"""

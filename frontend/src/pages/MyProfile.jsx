@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { formatDistanceToNow } from 'date-fns';
 import api from '../api';
 import { useAuth } from '../App';
 import { toast } from 'sonner';
 import notificationService from '../services/notificationService';
-import { Card } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Avatar, AvatarFallback } from '../components/ui/avatar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -22,6 +24,7 @@ export default function MyProfile() {
   const [showBalanceHistory, setShowBalanceHistory] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [reviews, setReviews] = useState([]);
   
   // Edit states for each card
   const [editingProfilePhoto, setEditingProfilePhoto] = useState(false);
@@ -87,6 +90,11 @@ export default function MyProfile() {
           interested_tags: userData.profile?.interested_tags || [],
           review_averages: userData.profile?.review_averages || null,
         };
+        
+        // Set reviews if available
+        if (userData.reviews) {
+          setReviews(userData.reviews);
+        }
         
         console.log('MyProfile: Backend response:', {
           interested_tags_from_backend: data.interested_tags,
@@ -1564,6 +1572,121 @@ export default function MyProfile() {
               </div>
             </div>
           </div>
+        </Card>
+
+        {/* Reviews Section */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl">Reviews Received</h2>
+            <Badge variant="secondary" className="text-sm">
+              {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
+            </Badge>
+          </div>
+          <Separator className="mb-6" />
+          
+          {reviews.length === 0 ? (
+            <Card className="border-primary/20">
+              <CardContent className="pt-6 text-center text-muted-foreground">
+                <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No reviews yet</p>
+                <p className="text-xs mt-1">You haven't received any reviews yet.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((review) => (
+                <Card key={review.id} className="border-primary/20">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarFallback>
+                            {review.reviewer_username?.substring(0, 2).toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <CardTitle className="text-base">
+                            {review.reviewer_username || 'Unknown User'}
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            {review.created_at ? formatDistanceToNow(new Date(review.created_at), { addSuffix: true }) : 'Recently'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                        <span className="text-sm font-semibold">
+                          {review.work_quality ? ((review.friendliness + review.time_management + review.reliability + review.communication + review.work_quality) / 5).toFixed(1) : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {review.post_title && (
+                      <div className="mb-4 pb-4 border-b border-gray-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm text-muted-foreground">Post:</p>
+                          {review.post_type && review.role && (
+                            <Badge 
+                              variant="secondary" 
+                              className="text-xs capitalize"
+                            >
+                              {review.post_type === 'offer' ? 'Offer' : 'Need'} • Role: {review.role}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-base font-medium text-primary">
+                          {review.post_title}
+                        </p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                      <div className="flex items-center gap-2">
+                        <Smile className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Friendliness</p>
+                          <p className="text-sm font-semibold">{review.friendliness}/5</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Timer className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Time Management</p>
+                          <p className="text-sm font-semibold">{review.time_management}/5</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Reliability</p>
+                          <p className="text-sm font-semibold">{review.reliability}/5</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Communication</p>
+                          <p className="text-sm font-semibold">{review.communication}/5</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Award className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Work Quality</p>
+                          <p className="text-sm font-semibold">{review.work_quality}/5</p>
+                        </div>
+                      </div>
+                    </div>
+                    {review.comment && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{review.comment}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Balance History Dialog */}
