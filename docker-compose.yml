@@ -53,6 +53,12 @@ services:
     networks:
       - internal_bridge # ADD: CRITICAL for frontend to see backend!
       - dokploy-network # ADD: For communication with Traefik 
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.frontend-service.loadbalancer.server.port=80"
+    #  - "traefik.http.routers.frontend-router.rule=Host(`${DOMAIN}`)"
+    #  - "traefik.http.routers.frontend-router.tls=true"
+    #  - "traefik.http.routers.frontend-router.tls.certresolver=letsencrypt"
 
 volumes:
   postgres_data: {}
