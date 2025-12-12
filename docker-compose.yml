@@ -1,11 +1,11 @@
 
 services:
-  # Database Service (PostgreSQL)
+  # Veritabanı Servisi (PostgreSQL)
   db:
     image: postgres:latest
     volumes:
       - postgres_data:/var/lib/postgresql
-    # 2. Bind variables from .env file here
+    # 2. .env dosyasındaki değişkenleri buraya bağlayın
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -18,19 +18,16 @@ services:
     networks:
       - internal_bridge
 
-  # Backend Service (Django)
+  # Backend Servisi (Django)
   backend:
     build: ./backend
-    #ports:
-    #  - "8000:8000"  # Expose backend for local development
     networks:
-      - internal_bridge # ADD: For frontend to see backend with this name
-      - dokploy-network # ADD: For communication with Traefik
+      - internal_bridge 
+      - dokploy-network 
     env_file: .env
     volumes:
-      - ./backend:/app # Bind code to container (for development)
+      - ./backend:/app 
     environment:
-      # 3. Ensure Django connects to the correct host (db)
       DB_HOST: db
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -42,37 +39,23 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              gunicorn the_hive.wsgi:application --bind 0.0.0.0:8000"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.backend-service.loadbalancer.server.port=8000"
-      - "traefik.http.routers.backend-router.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/`, `/admin/`, `/django-static/`)"
-      - "traefik.http.routers.backend-router.tls=true"
-      - "traefik.http.routers.backend-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.backend-router.entrypoints=websecure"
 
-  # Frontend Service (React + Nginx)
   frontend:
     build: ./frontend
-   # ports:
-   #  - "3001:80"
+    # container_name: react_frontend
+    # ports:
+    #   - "3001:81" 
     depends_on:
       - backend
     networks:
-      - internal_bridge # ADD: CRITICAL for frontend to see backend!
-      - dokploy-network # ADD: For communication with Traefik 
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.frontend-service.loadbalancer.server.port=80"
-      - "traefik.http.routers.frontend-router.rule=Host(`${DOMAIN}`) && !PathPrefix(`/api/`, `/admin/`, `/django-static/`)"
-      - "traefik.http.routers.frontend-router.tls=true"
-      - "traefik.http.routers.frontend-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.frontend-router.entrypoints=websecure"
+      - internal_bridge 
+      - dokploy-network 
 
 volumes:
   postgres_data: {}
 
 networks:
-  dokploy-network:  # Dokploy's Traefik Network (External access and SSL)
+  dokploy-network:  
     external: true
-  internal_bridge:  # Private network for services to see each other
+  internal_bridge:  
     driver: bridge
