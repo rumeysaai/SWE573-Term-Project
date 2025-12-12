@@ -356,6 +356,14 @@ class MyProfileView(APIView):
         serializer = UserSerializer(user, context={'request': request})
         user_data = serializer.data
         
+        # Ensure review_averages is included (calculate if missing)
+        if user_data.get('profile') and user_data['profile'].get('review_averages') is None:
+            # If review_averages is None, calculate it manually
+            try:
+                user_data['profile']['review_averages'] = user.profile.get_review_averages()
+            except Exception:
+                user_data['profile']['review_averages'] = None
+        
         # Fetch reviews received by this user (same as UserProfileView)
         from .models import Review
         reviews = Review.objects.filter(reviewed_user=user).select_related('reviewer', 'proposal', 'proposal__post').order_by('-created_at')
