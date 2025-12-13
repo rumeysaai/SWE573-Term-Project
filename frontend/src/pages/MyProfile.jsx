@@ -34,6 +34,7 @@ export default function MyProfile() {
   const [visibleOfferCount, setVisibleOfferCount] = useState(3);
   const [visibleNeedCount, setVisibleNeedCount] = useState(3);
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(3);
+  const [visibleReviewCount, setVisibleReviewCount] = useState(3);
   
   // Edit states for each card
   const [editingProfilePhoto, setEditingProfilePhoto] = useState(false);
@@ -52,6 +53,7 @@ export default function MyProfile() {
     avatar: '',
     time_balance: 0,
     interested_tags: [],
+    interested_tags_details: [], // Store tag details for cancel/reset without API call
   });
 
   // Local edit states for each section
@@ -98,6 +100,7 @@ export default function MyProfile() {
           avatar: userData.profile?.avatar || '',
           time_balance: userData.profile?.time_balance || user?.profile?.time_balance || 0,
           interested_tags: userData.profile?.interested_tags || [],
+          interested_tags_details: userData.profile?.interested_tags_details || [], // Store details for cancel/reset
           review_averages: userData.profile?.review_averages || null,
         };
         
@@ -190,52 +193,48 @@ export default function MyProfile() {
           return false;
         });
         
-        // Fetch post details for completed proposals
-        const completedJobsWithPosts = await Promise.all(
-          completedProposals.map(async (proposal) => {
-            try {
-              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
-              return {
-                proposalId: proposal.id,
-                post: postResponse.data,
-                timebank_hour: proposal.timebank_hour,
-                proposed_date: proposal.proposed_date,
-                updated_at: proposal.updated_at || proposal.updatedAt,
-              };
-            } catch (err) {
-              console.error('Error fetching post for proposal:', err);
-              return null;
-            }
-          })
-        );
+        // Use post_details from proposal to avoid N+1 queries (embedded in backend)
+        const completedJobsWithPosts = completedProposals.map((proposal) => {
+          // Use embedded post_details if available, otherwise fallback to post_id
+          const postData = proposal.post_details || (proposal.post_id ? { id: proposal.post_id } : null);
+          
+          if (!postData) {
+            return null;
+          }
+          
+          return {
+            proposalId: proposal.id,
+            post: postData,
+            timebank_hour: proposal.timebank_hour,
+            proposed_date: proposal.proposed_date,
+            updated_at: proposal.updated_at || proposal.updatedAt,
+          };
+        }).filter(job => job !== null);
         
-        const validJobs = completedJobsWithPosts.filter(job => job !== null);
-        setCompletedJobs(validJobs);
+        setCompletedJobs(completedJobsWithPosts);
         
-        // Fetch post details for cancelled job proposals
-        const cancelledJobsWithPosts = await Promise.all(
-          cancelledJobProposals.map(async (proposal) => {
-            try {
-              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
-              return {
-                proposalId: proposal.id,
-                post: postResponse.data,
-                timebank_hour: proposal.timebank_hour,
-                proposed_date: proposal.proposed_date,
-                updated_at: proposal.updated_at || proposal.updatedAt,
-                cancelled_by: proposal.job_cancelled_by_username,
-                cancellation_reason: proposal.job_cancellation_reason,
-                job_status: 'cancelled',
-              };
-            } catch (err) {
-              console.error('Error fetching post for cancelled proposal:', err);
-              return null;
-            }
-          })
-        );
+        // Use post_details from proposal to avoid N+1 queries (embedded in backend)
+        const cancelledJobsWithPosts = cancelledJobProposals.map((proposal) => {
+          // Use embedded post_details if available, otherwise fallback to post_id
+          const postData = proposal.post_details || (proposal.post_id ? { id: proposal.post_id } : null);
+          
+          if (!postData) {
+            return null;
+          }
+          
+          return {
+            proposalId: proposal.id,
+            post: postData,
+            timebank_hour: proposal.timebank_hour,
+            proposed_date: proposal.proposed_date,
+            updated_at: proposal.updated_at || proposal.updatedAt,
+            cancelled_by: proposal.job_cancelled_by_username,
+            cancellation_reason: proposal.job_cancellation_reason,
+            job_status: 'cancelled',
+          };
+        }).filter(job => job !== null);
         
-        const validCancelledJobs = cancelledJobsWithPosts.filter(job => job !== null);
-        setCancelledJobs(validCancelledJobs);
+        setCancelledJobs(cancelledJobsWithPosts);
         
         console.log('MyProfile: Backend response:', {
           interested_tags_from_backend: data.interested_tags,
@@ -556,44 +555,32 @@ export default function MyProfile() {
       // Update user context
       setUser(response.data);
       
-      // Update formData with tag IDs from response
+      // Update formData with tag IDs and details from response
       const updatedInterestedTags = response.data?.profile?.interested_tags || [];
+      const updatedInterestedTagsDetails = response.data?.profile?.interested_tags_details || [];
       setFormData(prev => ({ 
         ...prev, 
         bio: aboutMeData.bio, 
         interested_tags: updatedInterestedTags,
+        interested_tags_details: updatedInterestedTagsDetails, // Store details for future cancel/reset
       }));
       
       // Update aboutMeData with TagSelector format for display
-      if (updatedInterestedTags.length > 0) {
-        try {
-          const tagsResponse = await api.get('/tags/');
-          let allTagsData = [];
-          if (Array.isArray(tagsResponse.data)) {
-            allTagsData = tagsResponse.data;
-          } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
-            allTagsData = tagsResponse.data.results || [];
-          }
-          
-          const tagSelectorTags = updatedInterestedTags.map(tagId => {
-            const tag = allTagsData.find(t => t.id === tagId);
-            if (tag) {
-              return {
-                id: tag.id,
-                name: tag.name || tag.label,
-                label: tag.label || tag.name,
-                wikidata_id: tag.wikidata_id,
-                description: tag.description,
-                is_custom: tag.is_custom
-              };
-            }
-            return null;
-          }).filter(Boolean);
-          
-          setAboutMeData(prev => ({ ...prev, interested_tags: tagSelectorTags }));
-        } catch (error) {
-          console.error('Error refreshing tags after save:', error);
-        }
+      // Use interested_tags_details from backend response (optimized - no extra API call)
+      if (response.data?.profile?.interested_tags_details && Array.isArray(response.data.profile.interested_tags_details) && response.data.profile.interested_tags_details.length > 0) {
+        const tagSelectorTags = response.data.profile.interested_tags_details.map(tag => ({
+          id: tag.id,
+          name: tag.name || tag.label,
+          label: tag.label || tag.name,
+          wikidata_id: tag.wikidata_id,
+          description: tag.description,
+          is_custom: tag.is_custom
+        }));
+        setAboutMeData(prev => ({ ...prev, interested_tags: tagSelectorTags }));
+      } else if (updatedInterestedTags.length > 0) {
+        // Fallback: If backend didn't send details, keep current aboutMeData.interested_tags
+        // (This shouldn't happen with new code, but kept as safety)
+        console.warn('MyProfile: Backend did not send interested_tags_details after save');
       } else {
         setAboutMeData(prev => ({ ...prev, interested_tags: [] }));
       }
@@ -1463,41 +1450,12 @@ export default function MyProfile() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={async () => {
-                  // Load tag details when entering edit mode
-                  let tagSelectorTags = [];
-                  if (formData.interested_tags && Array.isArray(formData.interested_tags) && formData.interested_tags.length > 0) {
-                    try {
-                      const tagsResponse = await api.get('/tags/');
-                      let allTagsData = [];
-                      if (Array.isArray(tagsResponse.data)) {
-                        allTagsData = tagsResponse.data;
-                      } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
-                        allTagsData = tagsResponse.data.results || [];
-                      }
-                      
-                      tagSelectorTags = formData.interested_tags.map(tagId => {
-                        const tag = allTagsData.find(t => t.id === tagId);
-                        if (tag) {
-                          return {
-                            id: tag.id,
-                            name: tag.name || tag.label,
-                            label: tag.label || tag.name,
-                            wikidata_id: tag.wikidata_id,
-                            description: tag.description,
-                            is_custom: tag.is_custom
-                          };
-                        }
-                        return null;
-                      }).filter(Boolean);
-                    } catch (error) {
-                      console.error('Error loading tags for edit:', error);
-                    }
-                  }
-                  
+                onClick={() => {
+                  // Use existing aboutMeData.interested_tags (already loaded from backend with details)
+                  // No need for extra API call - tags are already in TagSelector format
                   setAboutMeData({ 
                     bio: formData.bio, 
-                    interested_tags: tagSelectorTags
+                    interested_tags: aboutMeData.interested_tags || []
                   });
                   setEditingAboutMe(true);
                 }}
@@ -1510,44 +1468,17 @@ export default function MyProfile() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={async () => {
-                    // Reload tag details when canceling
-                    let tagSelectorTags = [];
-                    if (formData.interested_tags && Array.isArray(formData.interested_tags) && formData.interested_tags.length > 0) {
-                      try {
-                        const tagsResponse = await api.get('/tags/');
-                        let allTagsData = [];
-                        if (Array.isArray(tagsResponse.data)) {
-                          allTagsData = tagsResponse.data;
-                        } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
-                          allTagsData = tagsResponse.data.results || [];
-                        }
-                        
-                        tagSelectorTags = formData.interested_tags.map(tagId => {
-                          // Handle both number and string IDs
-                          const tag = allTagsData.find(t => {
-                            const tId = typeof t.id === 'string' ? parseInt(t.id, 10) : t.id;
-                            const searchId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
-                            return tId === searchId;
-                          });
-                          if (tag) {
-                            return {
-                              id: tag.id,
-                              name: tag.name || tag.label,
-                              label: tag.label || tag.name,
-                              wikidata_id: tag.wikidata_id,
-                              description: tag.description,
-                              is_custom: tag.is_custom
-                            };
-                          }
-                          console.warn('Tag not found for ID:', tagId);
-                          return null;
-                        }).filter(Boolean);
-                      } catch (error) {
-                        console.error('Error loading tags for cancel:', error);
-                      }
-                    }
-                    
+                  onClick={() => {
+                    // Reset to original formData - use interested_tags_details from formData (no API call needed)
+                    const originalTagDetails = formData.interested_tags_details || [];
+                    const tagSelectorTags = originalTagDetails.map(tag => ({
+                      id: tag.id,
+                      name: tag.name || tag.label,
+                      label: tag.label || tag.name,
+                      wikidata_id: tag.wikidata_id,
+                      description: tag.description,
+                      is_custom: tag.is_custom
+                    }));
                     setEditingAboutMe(false);
                     setAboutMeData({ 
                       bio: formData.bio, 
@@ -2040,7 +1971,8 @@ export default function MyProfile() {
                         </CardContent>
                       </Card>
                     ) : (
-                      reviews.map((review) => (
+                      <>
+                        {reviews.slice(0, visibleReviewCount).map((review) => (
                         <Card key={review.id} className="border-primary/20">
                           <CardHeader>
                             <div className="flex items-start justify-between">
@@ -2130,7 +2062,19 @@ export default function MyProfile() {
                             )}
                           </CardContent>
                         </Card>
-                      ))
+                        ))}
+                        {reviews.length > visibleReviewCount && (
+                          <div className="flex justify-center pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => setVisibleReviewCount(prev => prev + 3)}
+                              className="w-full"
+                            >
+                              See More ({reviews.length - visibleReviewCount} more)
+                            </Button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </SimpleTabsContent>
                 </SimpleTabs>

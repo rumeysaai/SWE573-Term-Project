@@ -72,6 +72,11 @@ export default function Home() {
         // Note: Tag filtering is done client-side, not via API params
         if (selectedLocation) params.append('location', selectedLocation);
         if (searchTerm) params.append('search', searchTerm); 
+        
+        // Limit to first page only (PAGE_SIZE=20) to avoid loading all posts
+        // If pagination is needed in the future, implement "Load More" button
+        params.append('page', '1');
+        params.append('page_size', '20');
 
         const response = await api.get('/posts/', { params });
         
@@ -80,8 +85,10 @@ export default function Home() {
         if (Array.isArray(response.data)) {
           postsData = response.data;
         } else if (response.data && typeof response.data === 'object') {
-          
+          // Backend returns paginated response with 'results' array
           postsData = response.data.results || [];
+          // Note: response.data.next contains URL for next page if available
+          // For now, we only load the first page (20 posts) for performance
         }
         
         const formattedPosts = postsData.map(post => ({
@@ -120,7 +127,7 @@ export default function Home() {
 
     fetchPosts();
     
-  }, []); 
+  }, [selectedType, selectedLocation, searchTerm]); 
 
 
   const filteredPosts = React.useMemo(() => {
