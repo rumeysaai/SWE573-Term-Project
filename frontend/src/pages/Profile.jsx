@@ -38,6 +38,9 @@ export default function Profile() {
   const [error, setError] = useState(null);
   const [interestedTags, setInterestedTags] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [visibleOfferCount, setVisibleOfferCount] = useState(3);
+  const [visibleNeedCount, setVisibleNeedCount] = useState(3);
+  const [visibleHistoryCount, setVisibleHistoryCount] = useState(3);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -532,7 +535,7 @@ export default function Profile() {
               </SimpleTabsTrigger>
               <SimpleTabsTrigger value="comments">
                 <MessageSquare className="w-4 h-4 mr-2" />
-                Comments ({reviews.length})
+                Reviews ({reviews.length})
               </SimpleTabsTrigger>
             </SimpleTabsList>
 
@@ -543,7 +546,8 @@ export default function Profile() {
                   <p>No offers published yet.</p>
                 </div>
               ) : (
-                offerPosts.map((post) => (
+                <>
+                  {offerPosts.slice(0, visibleOfferCount).map((post) => (
                   <div
                     key={post.id}
                     className="border-2 border-primary/40 bg-white rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
@@ -590,7 +594,19 @@ export default function Profile() {
                       </div>
                     )}
                   </div>
-                ))
+                  ))}
+                  {offerPosts.length > visibleOfferCount && (
+                    <div className="flex justify-center pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => setVisibleOfferCount(prev => prev + 3)}
+                        className="w-full"
+                      >
+                        See More ({offerPosts.length - visibleOfferCount} more)
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </SimpleTabsContent>
 
@@ -601,7 +617,8 @@ export default function Profile() {
                   <p>No needs published yet.</p>
                 </div>
               ) : (
-                needPosts.map((post) => (
+                <>
+                  {needPosts.slice(0, visibleNeedCount).map((post) => (
                   <div
                     key={post.id}
                     className="border-2 border-orange-500 bg-white rounded-xl p-4 space-y-2 hover:border-orange-600 transition-colors cursor-pointer"
@@ -648,7 +665,19 @@ export default function Profile() {
                       </div>
                     )}
                   </div>
-                ))
+                  ))}
+                  {needPosts.length > visibleNeedCount && (
+                    <div className="flex justify-center pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => setVisibleNeedCount(prev => prev + 3)}
+                        className="w-full"
+                      >
+                        See More ({needPosts.length - visibleNeedCount} more)
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </SimpleTabsContent>
 
@@ -660,85 +689,19 @@ export default function Profile() {
                 </div>
               ) : (
                 <>
-                  {/* Completed Jobs */}
-                  {completedJobs.map((job) => {
-                  const post = job.post;
-                  return (
-                      <div
-                      key={job.proposalId}
-                      className="border-2 border-green-500 bg-white rounded-xl p-4 space-y-2 hover:border-green-600 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/post-details/${post.id}`)}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-green-700 font-medium">{post.title}</p>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {job.updated_at 
-                              ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
-                              : job.proposed_date
-                              ? formatDistanceToNow(new Date(job.proposed_date), { addSuffix: true })
-                              : 'Recently'}
-                          </p>
-                            {post.description && (
-                              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                                {post.description}
-                              </p>
-                            )}
-                          <div className="mt-2 flex items-center gap-4 text-xs text-green-600">
-                            <span className="flex items-center gap-1 font-bold">
-                              <Award className="w-3 h-3" />
-                              Completed
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Timer className="w-3 h-3" />
-                              {job.timebank_hour} hours
-                            </span>
-                          </div>
-                        </div>
-                        {post.duration && (
-                          <Badge
-                            variant="outline"
-                            className="border-green-300 text-green-700 bg-green-100"
-                          >
-                            {post.duration}
-                          </Badge>
-                        )}
-                      </div>
-                      {post.tags && post.tags.length > 0 && (
-                        <div className="flex gap-2 flex-wrap">
-                          {post.tags.map((tag, idx) => (
-                            <Badge
-                              key={idx}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                      {post.location && (
-                        <div className="flex items-center gap-1 text-xs text-gray-600">
-                          <MapPin className="w-3 h-3" />
-                          <span>{post.location}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                  })}
-                  
-                  {/* Cancelled Jobs (Refunds) */}
-                  {cancelledJobs.map((job) => {
+                  {/* Completed and Cancelled Jobs */}
+                  {[...completedJobs, ...cancelledJobs].slice(0, visibleHistoryCount).map((job) => {
                     const post = job.post;
+                    const isCancelled = job.job_status === 'cancelled';
                     return (
                       <div
-                        key={`cancelled-${job.proposalId}`}
-                        className="border-2 border-red-500 bg-white rounded-xl p-4 space-y-2 hover:border-red-600 transition-colors cursor-pointer"
+                        key={isCancelled ? `cancelled-${job.proposalId}` : job.proposalId}
+                        className={`border-2 ${isCancelled ? 'border-red-500 hover:border-red-600' : 'border-green-500 hover:border-green-600'} bg-white rounded-xl p-4 space-y-2 transition-colors cursor-pointer`}
                         onClick={() => navigate(`/post-details/${post.id}`)}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <p className="text-red-700 font-medium">{post.title}</p>
+                            <p className={`${isCancelled ? 'text-red-700' : 'text-green-700'} font-medium`}>{post.title}</p>
                             <p className="text-sm text-gray-600 mt-1">
                               {job.updated_at 
                                 ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
@@ -751,32 +714,47 @@ export default function Profile() {
                                 {post.description}
                               </p>
                             )}
-                            <div className="mt-2 flex items-center gap-4 text-xs text-red-600">
-                              <span className="flex items-center gap-1 font-bold">
-                                <XCircle className="w-3 h-3" />
-                                {job.cancellation_reason === 'not_showed_up' 
-                                  ? 'Cancelled - Transferred'
-                                  : 'Cancelled - Refunded'}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Timer className="w-3 h-3" />
-                                {job.cancellation_reason === 'not_showed_up' 
-                                  ? `+${job.timebank_hour} hours transferred`
-                                  : `+${job.timebank_hour} hours refunded`}
-                              </span>
-                              {job.cancelled_by && (
-                                <span className="text-red-600">
-                                  Cancelled by {job.cancelled_by}
-                                  {job.cancellation_reason === 'not_showed_up' && ' (Not Showed Up)'}
-                                  {job.cancellation_reason === 'other' && ' (Other)'}
-                                </span>
+                            <div className={`mt-2 flex items-center gap-4 text-xs ${isCancelled ? 'text-red-600' : 'text-green-600'}`}>
+                              {isCancelled ? (
+                                <>
+                                  <span className="flex items-center gap-1 font-bold">
+                                    <XCircle className="w-3 h-3" />
+                                    {job.cancellation_reason === 'not_showed_up' 
+                                      ? 'Cancelled - Transferred'
+                                      : 'Cancelled - Refunded'}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Timer className="w-3 h-3" />
+                                    {job.cancellation_reason === 'not_showed_up' 
+                                      ? `+${job.timebank_hour} hours transferred`
+                                      : `+${job.timebank_hour} hours refunded`}
+                                  </span>
+                                  {job.cancelled_by && (
+                                    <span className="text-red-600">
+                                      Cancelled by {job.cancelled_by}
+                                      {job.cancellation_reason === 'not_showed_up' && ' (Not Showed Up)'}
+                                      {job.cancellation_reason === 'other' && ' (Other)'}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <span className="flex items-center gap-1 font-bold">
+                                    <Award className="w-3 h-3" />
+                                    Completed
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Timer className="w-3 h-3" />
+                                    {job.timebank_hour} hours
+                                  </span>
+                                </>
                               )}
                             </div>
                           </div>
                           {post.duration && (
                             <Badge
                               variant="outline"
-                              className="border-red-300 text-red-700 bg-red-100"
+                              className={isCancelled ? "border-red-300 text-red-700 bg-red-100" : "border-green-300 text-green-700 bg-green-100"}
                             >
                               {post.duration}
                             </Badge>
@@ -804,6 +782,17 @@ export default function Profile() {
                       </div>
                     );
                   })}
+                  {(completedJobs.length + cancelledJobs.length) > visibleHistoryCount && (
+                    <div className="flex justify-center pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => setVisibleHistoryCount(prev => prev + 3)}
+                        className="w-full"
+                      >
+                        See More ({(completedJobs.length + cancelledJobs.length) - visibleHistoryCount} more)
+                      </Button>
+                    </div>
+                  )}
                 </>
               )}
             </SimpleTabsContent>

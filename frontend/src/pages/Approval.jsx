@@ -40,7 +40,7 @@ export default function Approval() {
   const [hasReviewed, setHasReviewed] = useState(false);
   const [canReview, setCanReview] = useState(false);
 
-  // Fetch user's approval-waiting proposals (if no proposalId)
+
   useEffect(() => {
     const fetchApprovalProposals = async () => {
       if (!user || proposalId) return; // Only fetch if no proposalId

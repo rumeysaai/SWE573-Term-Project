@@ -37,17 +37,10 @@ export default function ChatBox({ chat, currentUser }) {
           ? response.data 
           : (response.data?.results || []);
         
-        // Before setting messages, mark messages that were unread when fetched
-        // as unread in the UI (even though backend marks them as read)
-        // We'll preserve the is_read status from the initial fetch
-        // Note: Backend marks messages as read when fetched, but we want to show
-        // the unread status visually before marking them as read
+        
         setMessages(messagesData);
         
-        // Dispatch event to update unread count in Header
-        // Messages are automatically marked as read when fetched (backend logic)
-        // Use requestAnimationFrame to ensure this happens after state update
-        // But only dispatch if we actually fetched new messages
+        
         requestAnimationFrame(() => {
           window.dispatchEvent(new CustomEvent('messageUpdated'));
         });
@@ -60,10 +53,10 @@ export default function ChatBox({ chat, currentUser }) {
     };
 
     fetchMessages();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat?.id, currentUser?.id]); // Use chat.id and currentUser.id instead of full objects
+   
+  }, [chat?.id, currentUser?.id]); 
 
-  // Auto-scroll to bottom when new messages arrive
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -93,7 +86,7 @@ export default function ChatBox({ chat, currentUser }) {
     } catch (err) {
       console.error('Error sending message:', err);
       toast.error('Failed to send message');
-      setNewMessage(messageContent); // Restore message on error
+      setNewMessage(messageContent); 
     } finally {
       setSending(false);
     }

@@ -80,14 +80,14 @@ export default function Home() {
         if (Array.isArray(response.data)) {
           postsData = response.data;
         } else if (response.data && typeof response.data === 'object') {
-          // Handle paginated response (DRF pagination)
+          
           postsData = response.data.results || [];
         }
         
         const formattedPosts = postsData.map(post => ({
           id: post.id,
           title: post.title,
-          tags: post.tags, // This is a string array from backend ["Gardening", "Music"]
+          tags: post.tags, 
           location: post.location,
           type: post.post_type, 
           description: post.description,
@@ -95,6 +95,7 @@ export default function Home() {
           frequency: post.frequency,
           participantCount: post.participant_count,
           date: post.date,
+          time: post.time,
           postedBy: post.postedBy,
           avatar: post.avatar,
           image: post.image,
@@ -118,8 +119,8 @@ export default function Home() {
     };
 
     fetchPosts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount, filtering is done client-side 
+    
+  }, []); 
 
 
   const filteredPosts = React.useMemo(() => {
@@ -173,7 +174,6 @@ export default function Home() {
     !isNaN(post.latitude) && !isNaN(post.longitude)
   );
   
-  // Calculate center of map (default to Istanbul if no posts)
   const defaultCenter = [41.0082, 28.9784]; // Istanbul coordinates
   const mapCenter = postsWithCoordinates.length > 0
     ? [
@@ -185,6 +185,20 @@ export default function Home() {
   const handlePostClick = (post) => {
     setSelectedPost(post);
     setIsDialogOpen(true);
+  };
+
+  // Helper function to truncate location to 35 characters
+  const truncateLocation = (location) => {
+    if (!location) return '';
+    if (location.length <= 35) return location;
+    return location.substring(0, 35) + '...';
+  };
+
+  // Helper function to truncate title to 50 characters
+  const truncateTitle = (title) => {
+    if (!title) return '';
+    if (title.length <= 50) return title;
+    return title.substring(0, 50) + '...';
   };
 
   if (loading && posts.length === 0) { // Show full screen loading only on initial load
@@ -359,8 +373,8 @@ export default function Home() {
                           </div>
                           <div className="flex-1 min-w-0 flex flex-col">
                             <div className="flex items-start justify-between gap-2 mb-2">
-                              <CardTitle className="text-base flex-1 line-clamp-2">
-                                {post.title}
+                              <CardTitle className="text-base flex-1 line-clamp-2" title={post.title}>
+                                {truncateTitle(post.title)}
                               </CardTitle>
                               <Badge variant="offer" className="flex-shrink-0">
                                 Offer
@@ -368,7 +382,7 @@ export default function Home() {
                             </div>
                             <div className="flex items-center flex-wrap gap-2 mb-2 min-h-[24px]">
                               {Array.isArray(post.tags) && post.tags.length > 0 ? (
-                                post.tags.map((tag) => (
+                                post.tags.slice(0, 4).map((tag) => (
                                   <Badge
                                     key={tag}
                                     variant="secondary"
@@ -384,12 +398,15 @@ export default function Home() {
                             <div className="space-y-1 mt-auto">
                               <div className="flex items-center gap-2 text-sm text-gray-500">
                                 <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-                                <span className="truncate">{post.location}</span>
+                                <span className="truncate" title={post.location}>{truncateLocation(post.location)}</span>
                               </div>
                               {post.date && (
                                 <div className="flex items-center gap-2 text-sm text-gray-500">
                                   <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
-                                  <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                  <span>
+                                    {new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                    {post.time && ` • ${new Date(`2000-01-01T${post.time}`).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`}
+                                  </span>
                                 </div>
                               )}
                               {post.frequency && (
@@ -445,8 +462,8 @@ export default function Home() {
                           </div>
                           <div className="flex-1 min-w-0 flex flex-col">
                             <div className="flex items-start justify-between gap-2 mb-2">
-                              <CardTitle className="text-base flex-1 line-clamp-2">
-                                {post.title}
+                              <CardTitle className="text-base flex-1 line-clamp-2" title={post.title}>
+                                {truncateTitle(post.title)}
                               </CardTitle>
                               <Badge variant="need" className="flex-shrink-0">
                                 Need
@@ -454,7 +471,7 @@ export default function Home() {
                             </div>
                             <div className="flex items-center flex-wrap gap-2 mb-2 min-h-[24px]">
                               {Array.isArray(post.tags) && post.tags.length > 0 ? (
-                                post.tags.map((tag) => (
+                                post.tags.slice(0, 4).map((tag) => (
                                   <Badge
                                     key={tag}
                                     variant="secondary"
@@ -470,12 +487,15 @@ export default function Home() {
                             <div className="space-y-1 mt-auto">
                               <div className="flex items-center gap-2 text-sm text-gray-500">
                                 <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-                                <span className="truncate">{post.location}</span>
+                                <span className="truncate" title={post.location}>{truncateLocation(post.location)}</span>
                               </div>
                               {post.date && (
                                 <div className="flex items-center gap-2 text-sm text-gray-500">
                                   <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
-                                  <span>{new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                  <span>
+                                    {new Date(post.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                    {post.time && ` • ${new Date(`2000-01-01T${post.time}`).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`}
+                                  </span>
                                 </div>
                               )}
                               {post.frequency && (
@@ -664,11 +684,35 @@ export default function Home() {
               </div>
             )}
 
+            {/* Date and Time */}
+            {selectedPost.date && (
+              <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Calendar className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Date</p>
+                  <p className="text-sm font-medium text-gray-700">
+                    {new Date(selectedPost.date).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                    {selectedPost.time && (
+                      <span className="ml-2">
+                        • {new Date(`2000-01-01T${selectedPost.time}`).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <Separator />
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
-              {/* View Details button - visible to all users */}
+              
               <Button
                 variant="outline"
                 size="lg"
@@ -682,7 +726,7 @@ export default function Home() {
                 View Details
               </Button>
 
-              {/* Show Request Service/Offer Help only if user is not the post owner */}
+             
               {user && selectedPost.postedBy !== user.username && (
                 <Button
                   className="flex-1 shadow-md"
@@ -699,7 +743,7 @@ export default function Home() {
                 </Button>
               )}
               
-              {/* Show Edit button only if user is the post owner */}
+             
               {user && selectedPost.postedBy === user.username && (
                 <Link to={`/post/edit/${selectedPost.id}`} className="flex-1">
                   <Button

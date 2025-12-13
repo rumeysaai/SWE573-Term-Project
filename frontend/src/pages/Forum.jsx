@@ -82,11 +82,9 @@ export default function Forum() {
       return;
     }
 
-    // TagSelector'dan gelen format: [{ id: number, name: string, label: string, wikidata_id: string }, ...]
     setSelectedTags(tags);
     
-    // Extract tag IDs from tag objects
-    // Include tags with id OR wikidata_id (backend will find/create them)
+    
     const tagIds = tags
       .filter(tag => tag && (tag.id || tag.wikidata_id)) // Include tags with id or wikidata_id
       .map(tag => {
@@ -97,8 +95,6 @@ export default function Forum() {
             return tagId;
           }
         }
-        // If tag has wikidata_id but no id, we'll send wikidata_id separately
-        // For now, return null and handle wikidata_ids separately
         return null;
       })
       .filter(id => id !== null);
@@ -112,11 +108,11 @@ export default function Forum() {
     console.log('Extracted wikidata_ids:', wikidataIds);
     console.log('Setting formData.tag_ids to:', tagIds);
     
-    // Store both tag_ids and wikidata_ids in formData
+    
     setFormData(prev => ({
       ...prev,
       tag_ids: tagIds,
-      wikidata_ids: wikidataIds, // Will be used by backend to find/create tags
+      wikidata_ids: wikidataIds, 
     }));
   };
 

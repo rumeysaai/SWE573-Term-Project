@@ -133,7 +133,7 @@ export default function Proposal() {
         setLocationInput(postDetails.location);
       }
       
-      // If duration exists and can be parsed, use it as hours
+      
       if (postDetails.duration) {
         const durationMatch = postDetails.duration.match(/(\d+)\s*h/i);
         if (durationMatch) {
@@ -143,10 +143,7 @@ export default function Proposal() {
           }
         }
       }
-      
-      // Set time if available in post (check if post has time field)
-      // Note: Post model doesn't have a time field, so we can't pre-fill it from post
-      // But we can set a default time or leave it empty
+     
     }
   }, [postDetails]);
 
@@ -270,8 +267,7 @@ export default function Proposal() {
     p.status === 'accepted' && p.job_status !== 'cancelled'
   );
   
-  // Check if the most recent proposal is accepted (blocks new proposals)
-  // If status is 'completed', allow new proposals
+ 
   // If job_status is 'cancelled', allow new proposals (even if proposal status is 'accepted')
   const hasAcceptedProposal = mostRecentProposal?.status === 'accepted' 
     && mostRecentProposal?.status !== 'completed'
@@ -296,13 +292,13 @@ export default function Proposal() {
       // If time is provided, add it to the date
       const timeValue = acceptedProposal.time;
       if (timeValue) {
-        // Handle time formats: "HH:MM" or "HH:MM:SS"
+        
         const timeParts = timeValue.split(':');
         const hours = parseInt(timeParts[0], 10) || 0;
         const minutes = parseInt(timeParts[1], 10) || 0;
         eventDate.setHours(hours, minutes, 0, 0);
       } else {
-        // Default to end of day if no time specified
+        
         eventDate.setHours(23, 59, 59, 999);
       }
       
@@ -414,6 +410,21 @@ export default function Proposal() {
       toast.error('Post ID is missing');
       return;
     }
+    
+    // Check if user already has a proposal for this post
+    if (userProposals.length > 0) {
+      // Check if there's any proposal that's not completed or cancelled
+      const activeProposal = userProposals.find(p => {
+        const jobStatus = p.job_status || p.jobStatus;
+        return jobStatus !== 'completed' && jobStatus !== 'cancelled';
+      });
+      
+      if (activeProposal) {
+        toast.error('You have already sent a proposal for this post. Please wait for the current proposal to be completed or cancelled.');
+        return;
+      }
+    }
+    
     if (!proposalData.date) {
       toast.error('Please select a date');
       return;
@@ -422,6 +433,17 @@ export default function Proposal() {
       toast.error('Please select a time');
       return;
     }
+    
+    // Check if proposed date/time is at least 24 hours from now
+    const proposedDateTime = new Date(`${proposalData.date}T${proposalData.time}`);
+    const now = new Date();
+    const hoursUntilProposal = (proposedDateTime - now) / (1000 * 60 * 60);
+    
+    if (hoursUntilProposal < 24) {
+      toast.error('Proposal date and time must be at least 24 hours from now.');
+      return;
+    }
+    
     if (!proposalData.location || proposalData.location.trim() === '') {
       toast.error('Please select a location');
       return;
@@ -480,12 +502,12 @@ export default function Proposal() {
         }
       } catch (err) {
         console.error('Error checking balance:', err);
-        // Continue with proposal creation if balance check fails
+        
       }
     }
 
     try {
-      // Notes field - only the additional notes, not time/location
+      
       const notesText = proposalData.notes || '';
 
       const proposalPayload = {

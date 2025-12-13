@@ -41,6 +41,7 @@ export default function Post() {
 
   const [estimatedHours, setEstimatedHours] = useState(3);
   const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
   const [participantCount, setParticipantCount] = useState(1);
   const [frequency, setFrequency] = useState('one-time');
   const [isGroupActivity, setIsGroupActivity] = useState(false);
@@ -61,7 +62,7 @@ export default function Post() {
       setLoading(true);
       api.get(`/posts/${id}/`)
         .then(response => {
-          const { title, description, post_type, location, duration, tags, frequency, participant_count, date, latitude, longitude, image } = response.data;
+          const { title, description, post_type, location, duration, tags, frequency, participant_count, date, time, latitude, longitude, image } = response.data;
           
           // Convert tags from API (string array) to TagSelector format
           const tagObjects = Array.isArray(tags) ? tags.map(tagName => ({
@@ -95,6 +96,7 @@ export default function Post() {
           if (frequency) setFrequency(frequency);
           if (participant_count) setParticipantCount(participant_count);
           if (date) setDate(date);
+          if (time) setTime(time);
           
           setLoading(false);
         })
@@ -108,7 +110,7 @@ export default function Post() {
 
 
   const handleTagsChange = (tags) => {
-    // TagSelector returns array of tag objects like [{id: 1}, {name: "new tag", is_custom: true}, ...]
+    
     setSelectedTags(tags || []);
     
     // Convert to array of IDs for backend
@@ -116,8 +118,6 @@ export default function Post() {
       if (tag.id) {
         return tag.id;
       } else {
-        // For new custom tags, we'll send the full object and let backend create them
-        // But for now, we'll just track them separately
         return tag;
       }
     });
@@ -214,12 +214,11 @@ export default function Post() {
 
     const durationString = `${estimatedHours} hours`;
 
-    // Prepare tags_data: convert to format expected by backend (IDs or tag objects)
     const tags_data = selectedTags.map(tag => {
       if (tag.id) {
         return { id: tag.id };
       } else {
-        // Custom tag (no ID yet) - send as object with name
+        
         return {
           name: tag.name || tag.label || tag.value,
           is_custom: true,
@@ -241,6 +240,7 @@ export default function Post() {
       frequency: frequency || null,
       participant_count: participantCount || null,
       date: date || null,
+      time: time || null,
       image: post.image || null,
     };
 
@@ -441,14 +441,15 @@ export default function Post() {
                 onChange={handleTagsChange}
                 placeholder="Search or create tags (e.g., cooking, gardening, coding...)"
                 isMulti={true}
+                showAllTagsOnOpen={true}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Search from existing tags or create new ones. You can select multiple tags.
               </p>
             </div>
 
-            {/* Duration, Date, Participants */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Duration, Date, Time, Participants */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Duration */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -476,6 +477,20 @@ export default function Post() {
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
+                  className="h-10 text-sm border-primary/20"
+                />
+              </div>
+
+              {/* Time */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" />
+                  Time
+                </Label>
+                <Input
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
                   className="h-10 text-sm border-primary/20"
                 />
               </div>

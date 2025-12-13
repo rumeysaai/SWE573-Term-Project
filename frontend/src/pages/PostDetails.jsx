@@ -36,6 +36,7 @@ export default function PostDetails() {
   const [likedComments, setLikedComments] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [checkingProposal, setCheckingProposal] = useState(false);
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -58,6 +59,7 @@ export default function PostDetails() {
           frequency: postData.frequency,
           participantCount: postData.participant_count,
           date: postData.date,
+          time: postData.time,
           postedBy: postData.postedBy,
           postedById: postData.posted_by_id,
           avatar: postData.avatar,
@@ -380,6 +382,11 @@ export default function PostDetails() {
                     month: 'long',
                     day: 'numeric'
                   })}
+                  {post.time && (
+                    <span className="ml-2">
+                      • {new Date(`2000-01-01T${post.time}`).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -399,10 +406,44 @@ export default function PostDetails() {
               </Button>
             ) : (
               <Button
-                onClick={() => navigate(`/negotiate/${post.id}`)}
-                className="bg-primary hover:bg-primary/90 text-white"
+                onClick={async () => {
+                  if (checkingProposal) return; // Prevent duplicate clicks
+                  
+                  setCheckingProposal(true);
+                  try {
+                    // Check if user already has a proposal for this post
+                    const response = await api.get('/proposals/', { params: { sent: 'true' } });
+                    const sentProposals = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+                    const existingProposal = sentProposals.find(p => p.post_id === parseInt(postId));
+                    
+                    if (existingProposal) {
+                      toast.error('You have already sent a proposal for this post. Please check your proposals.');
+                      setCheckingProposal(false);
+                      return;
+                    }
+                    
+                    // If no existing proposal, navigate to negotiate page
+                    navigate(`/negotiate/${post.id}`);
+                  } catch (error) {
+                    console.error('Error checking proposals:', error);
+                    toast.error('Failed to check proposals. Please try again.');
+                  } finally {
+                    setCheckingProposal(false);
+                  }
+                }}
+                disabled={checkingProposal}
+                className="bg-primary hover:bg-primary/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {post.type === 'offer' ? 'Request Service' : 'Offer Help'}
+                {checkingProposal ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  <>
+                    {post.type === 'offer' ? 'Request Service' : 'Offer Help'}
+                  </>
+                )}
               </Button>
             )}
           </div>

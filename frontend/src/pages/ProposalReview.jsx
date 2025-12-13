@@ -20,6 +20,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Separator } from '../components/ui/separator';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { SimpleAvatar } from '../components/ui/SimpleAvatar';
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ export default function ProposalReview() {
   const [responseAction, setResponseAction] = useState(null); // 'accept' or 'decline'
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [canAccept, setCanAccept] = useState(true); // Check if user can accept (balance < 10 for offers)
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
     const fetchProposal = async () => {
@@ -76,7 +78,7 @@ export default function ProposalReview() {
             }
           } catch (err) {
             console.error('Error checking balance:', err);
-            setCanAccept(true); // Allow accept if balance check fails
+            setCanAccept(true); 
           }
         } else {
           setCanAccept(true);
@@ -286,6 +288,27 @@ export default function ProposalReview() {
     setShowCancelConfirm(false);
   };
 
+  const handleSendMessage = async () => {
+    if (!proposal || !user) return;
+    
+    try {
+      setSendingMessage(true);
+      
+      const response = await api.post('/chats/', {
+        user_id: proposal.requester_id,
+        post_id: proposal.post_id,
+      });
+      
+      
+      navigate(`/chat?chatId=${response.data.id}`);
+    } catch (err) {
+      console.error('Error creating chat:', err);
+      toast.error(err.response?.data?.error || 'Failed to start chat');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -352,13 +375,13 @@ export default function ProposalReview() {
       // If time is provided, add it to the date
       const timeValue = proposal.proposed_time || timeFromNotes;
       if (timeValue) {
-        // Handle time formats: "HH:MM" or "HH:MM:SS"
+        
         const timeParts = timeValue.split(':');
         const hours = parseInt(timeParts[0], 10) || 0;
         const minutes = parseInt(timeParts[1], 10) || 0;
         eventDate.setHours(hours, minutes, 0, 0);
       } else {
-        // Default to end of day if no time specified
+        
         eventDate.setHours(23, 59, 59, 999);
       }
       
@@ -563,20 +586,48 @@ export default function ProposalReview() {
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
             {/* Sender Info */}
-            <div className="flex items-center gap-3 bg-secondary/10 p-3 rounded-lg border border-primary/10">
-              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center bg-slate-900/10">
-                <User className="w-5 h-5 text-primary text-slate-900" />
+            <div className="flex items-center justify-between bg-secondary/10 p-3 rounded-lg border border-primary/10">
+              <div className="flex items-center gap-3 flex-1">
+                <SimpleAvatar
+                  src={proposal.requester_avatar || ''}
+                  fallback={proposal.requester_username?.charAt(0).toUpperCase() || 'U'}
+                  className="w-10 h-10"
+                />
+                <div className="flex-1">
+                  <button
+                    onClick={() => navigate(`/profile/${proposal.requester_username}`)}
+                    className="font-medium text-primary hover:underline cursor-pointer text-left"
+                  >
+                    {proposal.requester_username}
+                  </button>
+                  <p className="text-xs text-muted-foreground text-slate-600">
+                    Proposal sent on {new Date(proposal.created_at).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium">{proposal.requester_username}</p>
-                <p className="text-xs text-muted-foreground text-slate-600">
-                  Proposal sent on {new Date(proposal.created_at).toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </p>
-              </div>
+              <Button
+                onClick={handleSendMessage}
+                disabled={sendingMessage}
+                variant="outline"
+                size="sm"
+                className="ml-3"
+              >
+                {sendingMessage ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Send Message
+                  </>
+                )}
+              </Button>
             </div>
 
             <Separator />

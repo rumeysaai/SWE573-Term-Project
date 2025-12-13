@@ -8,7 +8,7 @@ export default function Welcome() {
 
   const handleNavigate = (path) => {
     setIsNavigating(true);
-    // Add slide animation
+    
     const container = document.querySelector('.welcome-container');
     if (container) {
       container.style.transform = 'translateX(-100%)';
@@ -47,32 +47,49 @@ export default function Welcome() {
               <h3 className="text-white font-bold text-xl drop-shadow-lg">The Hive</h3>
             </div>
 
-            {/* Right side - Navigation Links */}
-            <div className="flex items-center gap-6 mr-8 md:mr-12">
-              <button
-                onClick={() => handleNavigate('/login')}
-                className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
-              >
-                Home
-              </button>
-              <button
-                onClick={() => handleNavigate('/login')}
-                className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
-              >
-                Forum
-              </button>
-              <button
-                onClick={() => handleNavigate('/login')}
-                className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
-              >
-                How To
-              </button>
-              <button
-                onClick={() => handleNavigate('/login')}
-                className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
-              >
-                About
-              </button>
+            {/* Right side - Navigation Links and Auth Buttons */}
+            <div className="flex items-center gap-4 md:gap-6">
+              <div className="flex items-center gap-4 md:gap-6 mr-4">
+                <button
+                  onClick={() => handleNavigate('/login')}
+                  className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
+                >
+                  Home
+                </button>
+                <button
+                  onClick={() => handleNavigate('/login')}
+                  className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
+                >
+                  Forum
+                </button>
+                <button
+                  onClick={() => handleNavigate('/login')}
+                  className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
+                >
+                  How To
+                </button>
+                <button
+                  onClick={() => handleNavigate('/login')}
+                  className="text-base font-medium text-white hover:text-blue-200 transition-colors drop-shadow-lg"
+                >
+                  About
+                </button>
+              </div>
+              {/* Login and Sign Up Buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleNavigate('/login')}
+                  className="px-4 py-2 text-base font-medium text-blue-600 bg-white rounded-lg hover:bg-blue-50 transition-colors shadow-md drop-shadow-lg"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => handleNavigate('/signup')}
+                  className="px-4 py-2 text-base font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-md drop-shadow-lg"
+                >
+                  Sign Up
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -149,7 +166,7 @@ export default function Welcome() {
                   Contact
                 </button>
                 <button
-                  onClick={() => handleNavigate('/login')}
+                  onClick={() => handleNavigate('/faq')}
                   className="text-sm text-white/90 hover:text-white transition-colors drop-shadow-md flex items-center gap-2"
                 >
                   <HelpCircle className="w-4 h-4" />
@@ -170,14 +187,14 @@ export default function Welcome() {
               <h4 className="font-semibold text-white drop-shadow-lg">Legal</h4>
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => handleNavigate('/login')}
+                  onClick={() => handleNavigate('/tos')}
                   className="text-sm text-white/90 hover:text-white transition-colors drop-shadow-md flex items-center gap-2"
                 >
                   <FileText className="w-4 h-4" />
                   Terms of Service
                 </button>
                 <button
-                  onClick={() => handleNavigate('/login')}
+                  onClick={() => handleNavigate('/policy')}
                   className="text-sm text-white/90 hover:text-white transition-colors drop-shadow-md flex items-center gap-2"
                 >
                   <FileText className="w-4 h-4" />

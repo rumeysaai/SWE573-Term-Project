@@ -12,19 +12,28 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-import { User, Mail, Phone, MapPin, Save, X, Edit2, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown, MessageSquare, Star, Wallet } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, X, Edit2, Loader2, Award, Shield, Timer, Smile, Clock, TrendingUp, TrendingDown, MessageSquare, Star, Wallet, Leaf, Package, XCircle } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import { SimpleTabs, SimpleTabsList, SimpleTabsTrigger, SimpleTabsContent } from '../components/ui/SimpleTabs';
+import { useNavigate } from 'react-router-dom';
 import TagSelector from '../components/TagSelector';
 
 export default function MyProfile() {
   const { user, setUser } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showBalanceHistory, setShowBalanceHistory] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [reviews, setReviews] = useState([]);
+  const [userPosts, setUserPosts] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
+  const [cancelledJobs, setCancelledJobs] = useState([]);
+  const [visibleOfferCount, setVisibleOfferCount] = useState(3);
+  const [visibleNeedCount, setVisibleNeedCount] = useState(3);
+  const [visibleHistoryCount, setVisibleHistoryCount] = useState(3);
   
   // Edit states for each card
   const [editingProfilePhoto, setEditingProfilePhoto] = useState(false);
@@ -73,9 +82,11 @@ export default function MyProfile() {
         
         // STEP 2: Fetch full profile data (time_balance already shown from context)
         // Include review_averages for Community Ratings display
-        const response = await api.get('/users/me/', { params: { include_reviews: 'true' } });
-        const userData = response.data;
-        
+        const [profileResponse, postsResponse] = await Promise.all([
+          api.get('/users/me/', { params: { include_reviews: 'true' } }),
+          user?.username ? api.get('/posts/', { params: { posted_by__username: user.username } }) : Promise.resolve({ data: [] }),
+        ]);
+        const userData = profileResponse.data;
         const data = {
           username: userData.username || '',
           firstName: userData.first_name || '',
@@ -94,6 +105,137 @@ export default function MyProfile() {
         if (userData.reviews) {
           setReviews(userData.reviews);
         }
+        
+        // Format posts data
+        let postsData = [];
+        if (Array.isArray(postsResponse.data)) {
+          postsData = postsResponse.data;
+        } else if (postsResponse.data && typeof postsResponse.data === 'object') {
+          postsData = postsResponse.data.results || [];
+        }
+        
+        const formattedPosts = postsData.map(post => ({
+          id: post.id,
+          title: post.title,
+          tags: post.tags || [],
+          location: post.location,
+          type: post.post_type,
+          description: post.description,
+          duration: post.duration,
+          frequency: post.frequency,
+          participantCount: post.participant_count,
+          date: post.date,
+          postedBy: post.postedBy,
+          avatar: post.avatar,
+          postedDate: post.postedDate,
+        }));
+        
+        setUserPosts(formattedPosts);
+        
+        // Get user ID from profile
+        const userId = userData.id;
+        
+        // Fetch all proposals to find completed ones for this user
+        const [sentProposalsResponse, receivedProposalsResponse] = await Promise.all([
+          api.get(`/proposals/?sent=true&username=${user?.username}`),
+          api.get(`/proposals/?received=true&username=${user?.username}`),
+        ]);
+        
+        // Combine all proposals
+        const sentProposals = Array.isArray(sentProposalsResponse.data) 
+          ? sentProposalsResponse.data 
+          : (sentProposalsResponse.data?.results || []);
+        const receivedProposals = Array.isArray(receivedProposalsResponse.data) 
+          ? receivedProposalsResponse.data 
+          : (receivedProposalsResponse.data?.results || []);
+        
+        const allProposals = [...sentProposals, ...receivedProposals];
+        
+        // Filter proposals that belong to the current user
+        const userProposals = allProposals.filter(proposal => {
+          return proposal.requester_id === userId || proposal.provider_id === userId;
+        });
+        
+        // Filter completed proposals
+        const completedProposals = userProposals.filter(proposal => {
+          if (proposal.status !== 'completed') return false;
+          
+          const postType = proposal.post_type || proposal.post?.post_type;
+          const isProvider = proposal.provider_id === userId;
+          const isRequester = proposal.requester_id === userId;
+          
+          if (postType === 'offer') {
+            return isProvider;
+          } else if (postType === 'need') {
+            return isRequester;
+          }
+          return false;
+        });
+        
+        // Filter cancelled job proposals
+        const cancelledJobProposals = userProposals.filter(proposal => {
+          if (!proposal.job_status || proposal.job_status !== 'cancelled') {
+            return false;
+          }
+          
+          const postType = proposal.post_type || proposal.post?.post_type;
+          const isProvider = proposal.provider_id === userId;
+          const isRequester = proposal.requester_id === userId;
+          
+          if (postType === 'offer') {
+            return isRequester;
+          } else if (postType === 'need') {
+            return isProvider;
+          }
+          return false;
+        });
+        
+        // Fetch post details for completed proposals
+        const completedJobsWithPosts = await Promise.all(
+          completedProposals.map(async (proposal) => {
+            try {
+              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
+              return {
+                proposalId: proposal.id,
+                post: postResponse.data,
+                timebank_hour: proposal.timebank_hour,
+                proposed_date: proposal.proposed_date,
+                updated_at: proposal.updated_at || proposal.updatedAt,
+              };
+            } catch (err) {
+              console.error('Error fetching post for proposal:', err);
+              return null;
+            }
+          })
+        );
+        
+        const validJobs = completedJobsWithPosts.filter(job => job !== null);
+        setCompletedJobs(validJobs);
+        
+        // Fetch post details for cancelled job proposals
+        const cancelledJobsWithPosts = await Promise.all(
+          cancelledJobProposals.map(async (proposal) => {
+            try {
+              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
+              return {
+                proposalId: proposal.id,
+                post: postResponse.data,
+                timebank_hour: proposal.timebank_hour,
+                proposed_date: proposal.proposed_date,
+                updated_at: proposal.updated_at || proposal.updatedAt,
+                cancelled_by: proposal.job_cancelled_by_username,
+                cancellation_reason: proposal.job_cancellation_reason,
+                job_status: 'cancelled',
+              };
+            } catch (err) {
+              console.error('Error fetching post for cancelled proposal:', err);
+              return null;
+            }
+          })
+        );
+        
+        const validCancelledJobs = cancelledJobsWithPosts.filter(job => job !== null);
+        setCancelledJobs(validCancelledJobs);
         
         console.log('MyProfile: Backend response:', {
           interested_tags_from_backend: data.interested_tags,
@@ -204,7 +346,6 @@ export default function MyProfile() {
         time_balance: timeBalance
       }));
       
-      // Update AuthContext user state so Header.jsx also updates
       if (setUser) {
         setUser(prevUser => ({
           ...prevUser,
@@ -237,7 +378,6 @@ export default function MyProfile() {
     }
   }, [showSuggestions]);
 
-  // Sync locationInput when editing mode opens
   useEffect(() => {
     if (editingPersonalInfo) {
       setLocationInput(personalInfoData.location || '');
@@ -284,7 +424,7 @@ export default function MyProfile() {
         setUser(response.data);
       }
 
-      // Update formData with the new avatar from response or use the uploaded one
+      // Update formData with the new avatar from response or use the uploaded on
       const updatedAvatar = response.data?.profile?.avatar || profilePhotoData.avatar;
       setFormData(prev => ({ ...prev, avatar: updatedAvatar }));
       
@@ -772,7 +912,6 @@ export default function MyProfile() {
           const postType = proposal.post_type || proposal.post?.post_type;
           const amount = parseFloat(proposal.timebank_hour) || 0;
 
-          // Earned: Completed proposals
           if (proposal.status === 'completed') {
             if (postType === 'offer' && isProvider) {
               earned += amount;
@@ -781,7 +920,6 @@ export default function MyProfile() {
             }
           }
 
-          // Spent: Accepted and completed proposals (harcanan ve tamamlanan)
           if (proposal.status === 'completed' && proposal.job_status !== 'cancelled') {
             if (postType === 'offer' && isRequester) {
               spent += amount;
@@ -790,7 +928,6 @@ export default function MyProfile() {
             }
           }
 
-          // Pending: Accepted but not completed yet (waiting for approval/completion)
           if (proposal.status === 'accepted' && proposal.job_status !== 'cancelled' && proposal.status !== 'completed') {
             if (postType === 'offer' && isRequester) {
               pending += amount;
@@ -865,7 +1002,7 @@ export default function MyProfile() {
               <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-primary/20 hover:bg-white transition-colors">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingUp className="w-4 h-4 text-green-600" />
-                  <p className="text-xs font-medium text-slate-600">Earned</p>
+                  <p className="text-xs font-medium text-slate-600">Provided</p>
                 </div>
                 <p className="text-2xl font-bold text-green-600">+{timeBankStats.earned.toFixed(2)}</p>
                 <p className="text-xs text-slate-500">hours</p>
@@ -873,7 +1010,7 @@ export default function MyProfile() {
               <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-primary/20 hover:bg-white transition-colors">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingDown className="w-4 h-4 text-red-600" />
-                  <p className="text-xs font-medium text-slate-600">Spent</p>
+                  <p className="text-xs font-medium text-slate-600">Received</p>
                 </div>
                 <p className="text-2xl font-bold text-red-600">-{timeBankStats.spent.toFixed(2)}</p>
                 <p className="text-xs text-slate-500">hours</p>
@@ -1002,22 +1139,22 @@ export default function MyProfile() {
                   </div>
                 )} */}
               </div>
-              {formData.review_averages?.total_reviews > 0 ? (
+              {formData.review_averages && formData.review_averages.total_reviews && formData.review_averages.total_reviews > 0 ? (
                 <div className="space-y-3">
                   {/* Overall Rating - Larger */}
                   <div className="space-y-3 text-center pb-3 border-b border-primary/20">
                     <div className="flex items-center justify-center gap-2">
                       <span className="text-2xl font-bold text-primary">
-                        {formData.review_averages.overall.toFixed(1)}
+                        {formData.review_averages.overall?.toFixed(1) || '0.0'}
                       </span>
-                      <span className="text-2xl text-slate-500">/5</span>
+                      <span className="text-2xl font-bold text-primary">/5</span>
                     </div>
                     <div className="flex items-center justify-center gap-1">
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
                           className={`w-6 h-6 ${
-                            i < Math.round(formData.review_averages.overall)
+                            i < Math.round(formData.review_averages.overall || 0)
                               ? 'fill-yellow-400 text-yellow-400'
                               : 'text-gray-300'
                           }`}
@@ -1036,10 +1173,10 @@ export default function MyProfile() {
                         Friendliness
                       </Label>
                       <span className="text-xs text-primary">
-                        {formData.review_averages.friendliness.toFixed(1)}/5
+                        {(formData.review_averages.friendliness || 0).toFixed(1)}/5
                       </span>
                     </div>
-                    <Progress value={(formData.review_averages.friendliness / 5) * 100} className="h-1.5" />
+                    <Progress value={((formData.review_averages.friendliness || 0) / 5) * 100} className="h-1.5" />
                   </div>
                   {/* Time Management */}
                   <div className="space-y-1">
@@ -1049,10 +1186,10 @@ export default function MyProfile() {
                         Time Management
                       </Label>
                       <span className="text-xs text-primary">
-                        {formData.review_averages.time_management.toFixed(1)}/5
+                        {(formData.review_averages.time_management || 0).toFixed(1)}/5
                       </span>
                     </div>
-                    <Progress value={(formData.review_averages.time_management / 5) * 100} className="h-1.5" />
+                    <Progress value={((formData.review_averages.time_management || 0) / 5) * 100} className="h-1.5" />
                   </div>
                   {/* Reliability */}
                   <div className="space-y-1">
@@ -1062,10 +1199,10 @@ export default function MyProfile() {
                         Reliability
                       </Label>
                       <span className="text-xs text-primary">
-                        {formData.review_averages.reliability.toFixed(1)}/5
+                        {(formData.review_averages.reliability || 0).toFixed(1)}/5
                       </span>
                     </div>
-                    <Progress value={(formData.review_averages.reliability / 5) * 100} className="h-1.5" />
+                    <Progress value={((formData.review_averages.reliability || 0) / 5) * 100} className="h-1.5" />
                   </div>
                   {/* Communication */}
                   <div className="space-y-1">
@@ -1075,10 +1212,10 @@ export default function MyProfile() {
                         Communication
                       </Label>
                       <span className="text-xs text-primary">
-                        {formData.review_averages.communication.toFixed(1)}/5
+                        {(formData.review_averages.communication || 0).toFixed(1)}/5
                       </span>
                     </div>
-                    <Progress value={(formData.review_averages.communication / 5) * 100} className="h-1.5" />
+                    <Progress value={((formData.review_averages.communication || 0) / 5) * 100} className="h-1.5" />
                   </div>
                   {/* Work Quality */}
                   <div className="space-y-1">
@@ -1088,10 +1225,10 @@ export default function MyProfile() {
                         Work Quality
                       </Label>
                       <span className="text-xs text-primary">
-                        {formData.review_averages.work_quality.toFixed(1)}/5
+                        {(formData.review_averages.work_quality || 0).toFixed(1)}/5
                       </span>
                     </div>
-                    <Progress value={(formData.review_averages.work_quality / 5) * 100} className="h-1.5" />
+                    <Progress value={((formData.review_averages.work_quality || 0) / 5) * 100} className="h-1.5" />
                   </div>
                 </div>
               ) : (
@@ -1598,120 +1735,409 @@ export default function MyProfile() {
           </div>
         </Card>
 
-        {/* Reviews Section */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl">Reviews Received</h2>
-            <Badge variant="secondary" className="text-sm">
-              {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
-            </Badge>
-          </div>
-          <Separator className="mb-6" />
+        {/* Contributions to The Hive */}
+        {(() => {
+          const offerPosts = userPosts.filter(post => post.type === 'offer');
+          const needPosts = userPosts.filter(post => post.type === 'need');
           
-          {reviews.length === 0 ? (
-            <Card className="border-primary/20">
-              <CardContent className="pt-6 text-center text-muted-foreground">
-                <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No reviews yet</p>
-                <p className="text-xs mt-1">You haven't received any reviews yet.</p>
+          return (
+            <Card className="border-primary/20 shadow-md">
+              <CardHeader className="bg-gradient-to-r from-primary/5 to-secondary/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-primary-foreground">
+                    <Leaf className="w-5 h-5" />
+                  </div>
+                  <CardTitle className="text-primary" style={{ fontWeight: 400 }}>
+                    Contributions to The Hive
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <SimpleTabs defaultValue="offers">
+                  <SimpleTabsList>
+                    <SimpleTabsTrigger value="offers">
+                      <Leaf className="w-4 h-4 mr-2" />
+                      Offers
+                    </SimpleTabsTrigger>
+                    <SimpleTabsTrigger value="needs">
+                      <Package className="w-4 h-4 mr-2" />
+                      Needs
+                    </SimpleTabsTrigger>
+                    <SimpleTabsTrigger value="history">
+                      <Award className="w-4 h-4 mr-2" />
+                      The Hive History
+                    </SimpleTabsTrigger>
+                    <SimpleTabsTrigger value="comments">
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      Reviews ({reviews.length})
+                    </SimpleTabsTrigger>
+                  </SimpleTabsList>
+
+                  <SimpleTabsContent value="offers" className="space-y-3 mt-6">
+                    {offerPosts.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Leaf className="w-12 h-12 mx-auto mb-4 text-primary/50" />
+                        <p>No offers published yet.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {offerPosts.slice(0, visibleOfferCount).map((post) => (
+                          <div
+                            key={post.id}
+                            className="border-2 border-primary/40 bg-white rounded-xl p-4 space-y-2 hover:border-primary/60 transition-colors cursor-pointer"
+                            onClick={() => navigate(`/post-details/${post.id}`)}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="text-primary font-medium">{post.title}</p>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {post.postedDate ? formatDistanceToNow(new Date(post.postedDate), { addSuffix: true }) : 'Recently'}
+                                </p>
+                                {post.description && (
+                                  <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                                    {post.description}
+                                  </p>
+                                )}
+                              </div>
+                              {post.duration && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-primary text-primary bg-primary/10"
+                                >
+                                  {post.duration}
+                                </Badge>
+                              )}
+                            </div>
+                            {post.tags && post.tags.length > 0 && (
+                              <div className="flex gap-2 flex-wrap">
+                                {post.tags.map((tag, idx) => (
+                                  <Badge
+                                    key={idx}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            {post.location && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <MapPin className="w-3 h-3" />
+                                <span>{post.location}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {offerPosts.length > visibleOfferCount && (
+                          <div className="flex justify-center pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => setVisibleOfferCount(prev => prev + 3)}
+                              className="w-full"
+                            >
+                              See More ({offerPosts.length - visibleOfferCount} more)
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </SimpleTabsContent>
+
+                  <SimpleTabsContent value="needs" className="space-y-3 mt-6">
+                    {needPosts.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Package className="w-12 h-12 mx-auto mb-4 text-orange-500/50" />
+                        <p>No needs published yet.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {needPosts.slice(0, visibleNeedCount).map((post) => (
+                          <div
+                            key={post.id}
+                            className="border-2 border-orange-500 bg-white rounded-xl p-4 space-y-2 hover:border-orange-600 transition-colors cursor-pointer"
+                            onClick={() => navigate(`/post-details/${post.id}`)}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="text-orange-600 font-medium">{post.title}</p>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {post.postedDate ? formatDistanceToNow(new Date(post.postedDate), { addSuffix: true }) : 'Recently'}
+                                </p>
+                                {post.description && (
+                                  <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                                    {post.description}
+                                  </p>
+                                )}
+                              </div>
+                              {post.duration && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-accent text-orange-600 bg-accent/20"
+                                >
+                                  {post.duration}
+                                </Badge>
+                              )}
+                            </div>
+                            {post.tags && post.tags.length > 0 && (
+                              <div className="flex gap-2 flex-wrap">
+                                {post.tags.map((tag, idx) => (
+                                  <Badge
+                                    key={idx}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            {post.location && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <MapPin className="w-3 h-3" />
+                                <span>{post.location}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {needPosts.length > visibleNeedCount && (
+                          <div className="flex justify-center pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => setVisibleNeedCount(prev => prev + 3)}
+                              className="w-full"
+                            >
+                              See More ({needPosts.length - visibleNeedCount} more)
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </SimpleTabsContent>
+
+                  <SimpleTabsContent value="history" className="space-y-3 mt-6">
+                    {(completedJobs.length === 0 && cancelledJobs.length === 0) ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Award className="w-12 h-12 mx-auto mb-4 text-primary/50" />
+                        <p>No service history available yet.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {[...completedJobs, ...cancelledJobs].slice(0, visibleHistoryCount).map((job) => {
+                          const post = job.post;
+                          const isCancelled = job.job_status === 'cancelled';
+                          return (
+                            <div
+                              key={isCancelled ? `cancelled-${job.proposalId}` : job.proposalId}
+                              className={`border-2 ${isCancelled ? 'border-red-500 hover:border-red-600' : 'border-green-500 hover:border-green-600'} bg-white rounded-xl p-4 space-y-2 transition-colors cursor-pointer`}
+                              onClick={() => navigate(`/post-details/${post.id}`)}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <p className={`${isCancelled ? 'text-red-700' : 'text-green-700'} font-medium`}>{post.title}</p>
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    {job.updated_at 
+                                      ? formatDistanceToNow(new Date(job.updated_at), { addSuffix: true })
+                                      : job.proposed_date
+                                      ? formatDistanceToNow(new Date(job.proposed_date), { addSuffix: true })
+                                      : 'Recently'}
+                                  </p>
+                                  {post.description && (
+                                    <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                                      {post.description}
+                                    </p>
+                                  )}
+                                  <div className={`mt-2 flex items-center gap-4 text-xs ${isCancelled ? 'text-red-600' : 'text-green-600'}`}>
+                                    {isCancelled ? (
+                                      <>
+                                        <span className="flex items-center gap-1 font-bold">
+                                          <XCircle className="w-3 h-3" />
+                                          {job.cancellation_reason === 'not_showed_up' 
+                                            ? 'Cancelled - Transferred'
+                                            : 'Cancelled - Refunded'}
+                                        </span>
+                                        <span className="flex items-center gap-1">
+                                          <Timer className="w-3 h-3" />
+                                          {job.cancellation_reason === 'not_showed_up' 
+                                            ? `+${job.timebank_hour} hours transferred`
+                                            : `+${job.timebank_hour} hours refunded`}
+                                        </span>
+                                        {job.cancelled_by && (
+                                          <span className="text-red-600">
+                                            Cancelled by {job.cancelled_by}
+                                            {job.cancellation_reason === 'not_showed_up' && ' (Not Showed Up)'}
+                                            {job.cancellation_reason === 'other' && ' (Other)'}
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="flex items-center gap-1 font-bold">
+                                          <Award className="w-3 h-3" />
+                                          Completed
+                                        </span>
+                                        <span className="flex items-center gap-1">
+                                          <Timer className="w-3 h-3" />
+                                          {job.timebank_hour} hours
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                {post.duration && (
+                                  <Badge
+                                    variant="outline"
+                                    className={isCancelled ? "border-red-300 text-red-700 bg-red-100" : "border-green-300 text-green-700 bg-green-100"}
+                                  >
+                                    {post.duration}
+                                  </Badge>
+                                )}
+                              </div>
+                              {post.tags && post.tags.length > 0 && (
+                                <div className="flex gap-2 flex-wrap">
+                                  {post.tags.map((tag, idx) => (
+                                    <Badge
+                                      key={idx}
+                                      variant="secondary"
+                                      className="text-xs"
+                                    >
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                              {post.location && (
+                                <div className="flex items-center gap-1 text-xs text-gray-600">
+                                  <MapPin className="w-3 h-3" />
+                                  <span>{post.location}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {(completedJobs.length + cancelledJobs.length) > visibleHistoryCount && (
+                          <div className="flex justify-center pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => setVisibleHistoryCount(prev => prev + 3)}
+                              className="w-full"
+                            >
+                              See More ({(completedJobs.length + cancelledJobs.length) - visibleHistoryCount} more)
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </SimpleTabsContent>
+
+                  <SimpleTabsContent value="comments" className="space-y-4 mt-6">
+                    {reviews.length === 0 ? (
+                      <Card className="border-primary/20">
+                        <CardContent className="pt-6 text-center text-muted-foreground">
+                          <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No comments yet</p>
+                          <p className="text-xs mt-1">You haven't received any reviews yet.</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      reviews.map((review) => (
+                        <Card key={review.id} className="border-primary/20">
+                          <CardHeader>
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-3">
+                                <Avatar>
+                                  <AvatarFallback>
+                                    {review.reviewer_username?.substring(0, 2).toUpperCase() || 'U'}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <CardTitle className="text-base">
+                                    {review.reviewer_username || 'Unknown User'}
+                                  </CardTitle>
+                                  <p className="text-xs text-muted-foreground">
+                                    {review.created_at ? formatDistanceToNow(new Date(review.created_at), { addSuffix: true }) : 'Recently'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                                <span className="text-sm font-semibold">
+                                  {review.work_quality ? ((review.friendliness + review.time_management + review.reliability + review.communication + review.work_quality) / 5).toFixed(1) : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            {review.post_title && (
+                              <div className="mb-4 pb-4 border-b border-gray-200">
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-sm text-muted-foreground">Post:</p>
+                                  {review.post_type && review.role && (
+                                    <Badge 
+                                      variant="secondary" 
+                                      className="text-xs capitalize"
+                                    >
+                                      {review.post_type === 'offer' ? 'Offer' : 'Need'} • Role: {review.role}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-base font-medium text-primary">
+                                  {review.post_title}
+                                </p>
+                              </div>
+                            )}
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                              <div className="flex items-center gap-2">
+                                <Smile className="w-4 h-4 text-primary" />
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Friendliness</p>
+                                  <p className="text-sm font-semibold">{review.friendliness}/5</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Timer className="w-4 h-4 text-primary" />
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Time Management</p>
+                                  <p className="text-sm font-semibold">{review.time_management}/5</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Shield className="w-4 h-4 text-primary" />
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Reliability</p>
+                                  <p className="text-sm font-semibold">{review.reliability}/5</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <MessageSquare className="w-4 h-4 text-primary" />
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Communication</p>
+                                  <p className="text-sm font-semibold">{review.communication}/5</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Award className="w-4 h-4 text-primary" />
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Work Quality</p>
+                                  <p className="text-sm font-semibold">{review.work_quality}/5</p>
+                                </div>
+                              </div>
+                            </div>
+                            {review.comment && (
+                              <div className="mt-4 pt-4 border-t border-gray-200">
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{review.comment}</p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </SimpleTabsContent>
+                </SimpleTabs>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-4">
-              {reviews.map((review) => (
-                <Card key={review.id} className="border-primary/20">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarFallback>
-                            {review.reviewer_username?.substring(0, 2).toUpperCase() || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <CardTitle className="text-base">
-                            {review.reviewer_username || 'Unknown User'}
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground">
-                            {review.created_at ? formatDistanceToNow(new Date(review.created_at), { addSuffix: true }) : 'Recently'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                        <span className="text-sm font-semibold">
-                          {review.work_quality ? ((review.friendliness + review.time_management + review.reliability + review.communication + review.work_quality) / 5).toFixed(1) : 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {review.post_title && (
-                      <div className="mb-4 pb-4 border-b border-gray-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm text-muted-foreground">Post:</p>
-                          {review.post_type && review.role && (
-                            <Badge 
-                              variant="secondary" 
-                              className="text-xs capitalize"
-                            >
-                              {review.post_type === 'offer' ? 'Offer' : 'Need'} • Role: {review.role}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-base font-medium text-primary">
-                          {review.post_title}
-                        </p>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                      <div className="flex items-center gap-2">
-                        <Smile className="w-4 h-4 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Friendliness</p>
-                          <p className="text-sm font-semibold">{review.friendliness}/5</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Timer className="w-4 h-4 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Time Management</p>
-                          <p className="text-sm font-semibold">{review.time_management}/5</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Reliability</p>
-                          <p className="text-sm font-semibold">{review.reliability}/5</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Communication</p>
-                          <p className="text-sm font-semibold">{review.communication}/5</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Award className="w-4 h-4 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Work Quality</p>
-                          <p className="text-sm font-semibold">{review.work_quality}/5</p>
-                        </div>
-                      </div>
-                    </div>
-                    {review.comment && (
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{review.comment}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </Card>
+          );
+        })()}
 
         {/* Balance History Dialog */}
         <Dialog open={showBalanceHistory} onOpenChange={setShowBalanceHistory}>
