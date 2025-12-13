@@ -1,10 +1,11 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { Leaf, Mail, HelpCircle, MessageCircle, FileText } from 'lucide-react';
 import { Button } from './ui/button';
 
 export function Footer() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Login/Register sayfalarında footer gösterme
   if (location.pathname === '/login' || location.pathname === '/register') {
@@ -32,7 +33,7 @@ export function Footer() {
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-900">Quick Links</h4>
             <div className="flex flex-col gap-2">
-              <Link to="/" className="text-sm text-gray-600 hover:text-primary transition-colors">
+              <Link to="/home" className="text-sm text-gray-600 hover:text-primary transition-colors">
                 Home
               </Link>
               <Link to="/post/new" className="text-sm text-gray-600 hover:text-primary transition-colors">
@@ -41,7 +42,7 @@ export function Footer() {
               <Link to="/forum" className="text-sm text-gray-600 hover:text-primary transition-colors">
                 Community Forum
               </Link>
-              <Link to="/profile" className="text-sm text-gray-600 hover:text-primary transition-colors">
+              <Link to="/my-profile" className="text-sm text-gray-600 hover:text-primary transition-colors">
                 My Profile
               </Link>
             </div>
@@ -65,10 +66,7 @@ export function Footer() {
               <Button
                 variant="ghost"
                 className="justify-start text-gray-600 hover:text-primary p-0 h-auto font-normal"
-                onClick={() => {
-                  // TODO: Implement FAQ functionality
-                  console.log('FAQ clicked');
-                }}
+                onClick={() => navigate('/faq')}
               >
                 <HelpCircle className="w-4 h-4 mr-2" />
                 FAQ
@@ -94,10 +92,7 @@ export function Footer() {
               <Button
                 variant="ghost"
                 className="justify-start text-gray-600 hover:text-primary p-0 h-auto font-normal"
-                onClick={() => {
-                  // TODO: Implement terms functionality
-                  console.log('Terms clicked');
-                }}
+                onClick={() => navigate('/tos')}
               >
                 <FileText className="w-4 h-4 mr-2" />
                 Terms of Service
@@ -105,10 +100,7 @@ export function Footer() {
               <Button
                 variant="ghost"
                 className="justify-start text-gray-600 hover:text-primary p-0 h-auto font-normal"
-                onClick={() => {
-                  // TODO: Implement privacy functionality
-                  console.log('Privacy clicked');
-                }}
+                onClick={() => navigate('/policy')}
               >
                 <FileText className="w-4 h-4 mr-2" />
                 Privacy Policy

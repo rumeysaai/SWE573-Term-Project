@@ -25,6 +25,9 @@ import AdminDashboard from './pages/AdminDashboard';
 import HowTo from './pages/HowTo';
 import TimeBank from './pages/TimeBank';
 import About from './pages/About';
+import FAQ from './pages/FAQ';
+import ToS from './pages/ToS';
+import Policy from './pages/Policy';
 import Chat from './pages/Chat';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -429,6 +432,42 @@ export default function App() {
                 <Header />
                 <main className="flex-1 px-6 md:px-8 lg:px-12">
                   <ProtectedRoute><About /></ProtectedRoute>
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/faq"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <FAQ />
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/tos"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <ToS />
+                </main>
+                <Footer />
+              </div>
+            }
+          />
+          <Route
+            path="/policy"
+            element={
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 px-6 md:px-8 lg:px-12">
+                  <Policy />
                 </main>
                 <Footer />
               </div>

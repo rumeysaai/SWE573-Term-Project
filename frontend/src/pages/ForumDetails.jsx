@@ -20,86 +20,6 @@ export default function ForumDetails() {
   const { topicId } = useParams();
   const navigate = useNavigate();
   
-  // Mock data - In a real app, this would be fetched from the backend
-  const mockTopics = [
-    {
-      id: 1,
-      title: "Tips for First-Time TimeBank Users",
-      author: "CommunityHelper",
-      authorAvatar: null,
-      likes: 24,
-      comments: 12,
-      category: "discussion",
-      content: "Welcome to The Hive! Here are some helpful tips for new TimeBank users:\n\n1. Start by exploring available services in your area\n2. Build your time balance by offering services\n3. Be clear about what you can offer and what you need\n4. Communicate clearly with other members\n5. Rate and review services to help build trust\n\nFeel free to share your own tips below!",
-      createdAt: new Date('2025-10-15'),
-    },
-    {
-      id: 2,
-      title: "Neighborhood Garden Day - October 25th",
-      author: "GreenThumb",
-      authorAvatar: null,
-      likes: 18,
-      comments: 8,
-      category: "event",
-      date: "Oct 25, 2025",
-      content: "Join us for a community garden day! We'll be working together to prepare the neighborhood garden for winter.\n\nDate: October 25th, 2025\nTime: 10:00 AM - 2:00 PM\nLocation: Community Garden, Main Street\n\nWhat to bring:\n- Gardening gloves\n- Water bottle\n- Enthusiasm!\n\nWe'll provide tools and refreshments. All skill levels welcome!",
-      createdAt: new Date('2025-10-10'),
-    },
-    {
-      id: 3,
-      title: "What services are most in demand?",
-      author: "NewMember42",
-      authorAvatar: null,
-      likes: 15,
-      comments: 20,
-      category: "discussion",
-      content: "I'm new to the platform and wondering what types of services are most popular. What should I focus on offering?",
-      createdAt: new Date('2025-10-12'),
-    },
-    {
-      id: 4,
-      title: "Online Cooking Class - This Saturday",
-      author: "ChefSarah",
-      authorAvatar: null,
-      likes: 32,
-      comments: 14,
-      category: "event",
-      date: "Oct 19, 2025",
-      content: "Join me for an online cooking class this Saturday! We'll be making delicious pasta from scratch.\n\nTime: 2:00 PM\nPlatform: Zoom (link will be sent)\n\nWhat you'll learn:\n- Making fresh pasta dough\n- Creating different pasta shapes\n- Simple sauce recipes\n\nAll ingredients list will be provided upon registration.",
-      createdAt: new Date('2025-10-08'),
-    },
-  ];
-
-  const mockComments = [
-    {
-      id: 1,
-      topicId: 1,
-      author: "storyteller_94",
-      authorAvatar: null,
-      text: "Great question! I've had success with gardening and tutoring services.",
-      likes: 5,
-      createdAt: new Date('2025-10-15'),
-    },
-    {
-      id: 2,
-      topicId: 1,
-      author: "designer_can",
-      authorAvatar: null,
-      text: "Digital skills are always in high demand in our community.",
-      likes: 8,
-      createdAt: new Date('2025-10-15'),
-    },
-    {
-      id: 3,
-      topicId: 1,
-      author: "miss_chopin",
-      authorAvatar: null,
-      text: "Check the tags cloud on your profile to see trending categories!",
-      likes: 3,
-      createdAt: new Date('2025-10-16'),
-    },
-  ];
-
   const [newComment, setNewComment] = useState('');
   const [likedComments, setLikedComments] = useState(new Set());
   const [topicLiked, setTopicLiked] = useState(false);
@@ -127,7 +47,6 @@ export default function ForumDetails() {
       return;
     }
 
-    // In a real app, this would be an API call
     toast.success('Comment added');
     setNewComment('');
   };

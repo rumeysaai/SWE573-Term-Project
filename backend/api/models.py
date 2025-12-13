@@ -18,6 +18,7 @@ class Profile(models.Model):
     bio = models.TextField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
     location = models.CharField(max_length=200, blank=True, null=True)
+    birth_date = models.DateField(blank=True, null=True, help_text="User's birth date for age verification")
     interested_tags = models.ManyToManyField('Tag', blank=True, related_name='interested_profiles')
     
     @property
@@ -152,6 +153,7 @@ class Post(models.Model):
     frequency = models.CharField(max_length=50, blank=True, null=True) 
     participant_count = models.IntegerField(default=1, blank=True, null=True)
     date = models.DateField(blank=True, null=True)
+    time = models.TimeField(blank=True, null=True)
     
     # Geographic coordinates
     latitude = models.FloatField(blank=True, null=True)

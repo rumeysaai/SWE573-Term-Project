@@ -13,7 +13,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Checkbox } from '../components/ui/checkbox';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
-import { Leaf, UserPlus, MapPin, FileText, Tag, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import { Leaf, UserPlus, MapPin, FileText, Tag, Loader2, ScrollText } from 'lucide-react';
 import TagSelector from '../components/TagSelector'; 
 
 export default function Signup() { 
@@ -22,15 +30,22 @@ export default function Signup() {
       firstName: '',
       lastName: '',
       email: '',
+      confirmEmail: '',
       password: '',
       confirmPassword: '',
       location: '',
       bio: '',
-      interestedTags: [], // TagSelector format for interests/tags
+      birthDate: '',
+      interestedTags: [], 
       acceptedTerms: false,
     });
     
     const [loading, setLoading] = useState(false);
+    const [usernameError, setUsernameError] = useState('');
+    const [emailError, setEmailError] = useState('');
+    const [birthDateError, setBirthDateError] = useState('');
+    const [showRulesDialog, setShowRulesDialog] = useState(false);
+    const [rulesAccepted, setRulesAccepted] = useState(false);
     
     // Location autocomplete states
     const [locationInput, setLocationInput] = useState('');
@@ -42,9 +57,63 @@ export default function Signup() {
     const navigate = useNavigate();
     const { setUser } = useAuth();
   
+    // Check for Turkish characters in username
+    const hasTurkishCharacters = (text) => {
+      const turkishChars = /[çğıöşüÇĞİÖŞÜ]/;
+      return turkishChars.test(text);
+    };
+
     const handleChange = (e) => {
       const { id, value } = e.target;
       setFormData(prev => ({ ...prev, [id]: value }));
+      
+      // Username validation - check for Turkish characters and minimum length
+      if (id === 'userName') {
+        if (value.length > 0 && value.length < 5) {
+          setUsernameError('Username must be at least 5 characters long');
+        } else if (hasTurkishCharacters(value)) {
+          setUsernameError('Username cannot contain Turkish characters (ç, ğ, ı, ö, ş, ü, Ç, Ğ, İ, Ö, Ş, Ü)');
+        } else {
+          setUsernameError('');
+        }
+      }
+      
+      // Email validation - check if emails match
+      if (id === 'email' || id === 'confirmEmail') {
+        if (id === 'email') {
+          if (formData.confirmEmail && value !== formData.confirmEmail) {
+            setEmailError('Emails do not match');
+          } else {
+            setEmailError('');
+          }
+        } else if (id === 'confirmEmail') {
+          if (formData.email && value !== formData.email) {
+            setEmailError('Emails do not match');
+          } else {
+            setEmailError('');
+          }
+        }
+      }
+      
+      // Birth date validation - check if user is 18 or older
+      if (id === 'birthDate') {
+        if (value) {
+          const birthDate = new Date(value);
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          if (age < 18) {
+            setBirthDateError('You must be at least 18 years old to register.');
+          } else {
+            setBirthDateError('');
+          }
+        } else {
+          setBirthDateError('');
+        }
+      }
     };
 
     // Location autocomplete functions
@@ -96,7 +165,7 @@ export default function Signup() {
       setLocationSuggestions([]);
     };
 
-    // Cleanup timeout on unmount
+   
     useEffect(() => {
       return () => {
         if (locationTimeoutRef.current) {
@@ -109,10 +178,40 @@ export default function Signup() {
       setFormData(prev => ({ ...prev, acceptedTerms: !!checked }));
     };
 
+    const handleRulesDialogClose = () => {
+      setShowRulesDialog(false);
+      
+      if (rulesAccepted) {
+        setFormData(prev => ({ ...prev, acceptedTerms: true }));
+        setRulesAccepted(false);
+      }
+    };
+
+    const handleAcceptRules = () => {
+      setRulesAccepted(true);
+      setFormData(prev => ({ ...prev, acceptedTerms: true }));
+      setShowRulesDialog(false);
+    };
+
   
     const handleSubmit = async (e) => {
       e.preventDefault();
   
+      // Username validation
+      if (formData.userName.length < 5) {
+        toast.error('Username must be at least 5 characters long.');
+        return;
+      }
+      if (hasTurkishCharacters(formData.userName)) {
+        toast.error('Username cannot contain Turkish characters.');
+        return;
+      }
+      
+      // Email validation
+      if (formData.email !== formData.confirmEmail) {
+        toast.error('Emails do not match.');
+        return;
+      }
       
       if (formData.password !== formData.confirmPassword) {
         toast.error('Passwords do not match.');
@@ -122,6 +221,25 @@ export default function Signup() {
         toast.error('Password must be at least 8 characters.');
         return;
       }
+      
+      // Birth date validation - must be 18 or older
+      if (!formData.birthDate) {
+        toast.error('Please enter your birth date.');
+        return;
+      }
+      const birthDate = new Date(formData.birthDate);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        toast.error('You must be at least 18 years old to register.');
+        setBirthDateError('You must be at least 18 years old to register.');
+        return;
+      }
+      
       if (!formData.acceptedTerms) {
         toast.error('You must accept the community rules.');
         return;
@@ -140,6 +258,7 @@ export default function Signup() {
           interested_tags: formData.interestedTags || [],
           location: formData.location,
           bio: formData.bio,
+          birth_date: formData.birthDate,
         });
   
         setLoading(false);
@@ -199,8 +318,16 @@ export default function Signup() {
                       required
                       value={formData.userName}
                       onChange={handleChange}
-                      className="bg-card border-primary/20 focus:border-primary"
+                      className={`bg-card border-primary/20 focus:border-primary ${
+                        usernameError ? 'border-red-500 focus:border-red-500' : ''
+                      }`}
                     />
+                    {usernameError && (
+                      <p className="text-xs text-red-500 mt-1">{usernameError}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Username must be at least 5 characters and cannot contain Turkish characters
+                    </p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -231,14 +358,53 @@ export default function Signup() {
                     <Input
                       id="email"
                       type="email"
-                      placeholder="For verification purposes"
+                      placeholder="Enter your email"
                       required
                       value={formData.email}
                       onChange={handleChange}
-                      className="bg-card border-primary/20 focus:border-primary"
+                      className={`bg-card border-primary/20 focus:border-primary ${
+                        emailError ? 'border-red-500 focus:border-red-500' : ''
+                      }`}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmEmail">Confirm Email</Label>
+                    <Input
+                      id="confirmEmail"
+                      type="email"
+                      placeholder="Re-enter your email"
+                      required
+                      value={formData.confirmEmail}
+                      onChange={handleChange}
+                      className={`bg-card border-primary/20 focus:border-primary ${
+                        emailError ? 'border-red-500 focus:border-red-500' : ''
+                      }`}
+                    />
+                    {emailError && (
+                      <p className="text-xs text-red-500 mt-1">{emailError}</p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       Required for account verification
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="birthDate">Birth Date</Label>
+                    <Input
+                      id="birthDate"
+                      type="date"
+                      required
+                      value={formData.birthDate}
+                      onChange={handleChange}
+                      max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
+                      className={`bg-card border-primary/20 focus:border-primary ${
+                        birthDateError ? 'border-red-500 focus:border-red-500' : ''
+                      }`}
+                    />
+                    {birthDateError && (
+                      <p className="text-xs text-red-500 mt-1">{birthDateError}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      You must be at least 18 years old to register
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -473,9 +639,16 @@ export default function Signup() {
                     className="text-sm font-normal cursor-pointer"
                   >
                     I agree to the{' '}
-                    <Link to="/terms" className="text-primary hover:underline">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowRulesDialog(true);
+                      }}
+                      className="text-primary hover:underline"
+                    >
                       Community Rules
-                    </Link>
+                    </button>
                   </Label>
                 </div>
               </div>
@@ -494,6 +667,147 @@ export default function Signup() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Community Rules Dialog */}
+        <Dialog open={showRulesDialog} onOpenChange={setShowRulesDialog}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl flex items-center gap-2">
+                <ScrollText className="w-6 h-6 text-primary" />
+                The Hive Community Rules
+              </DialogTitle>
+              <DialogDescription>
+                Please read and accept the community rules to continue
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6 py-4">
+              <p className="text-gray-700 leading-relaxed">
+                The Hive is a time exchange platform built on mutual respect, trust, and solidarity. These rules have been established to ensure that all members participate in a fair and sustainable ecosystem. Every user who completes the registration process is deemed to have accepted these rules in advance.
+              </p>
+
+              {/* Section I */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">I. TimeBank System and Financial Rules</h3>
+                <p className="text-gray-700 leading-relaxed">
+                  TimeBank is the core operating mechanism of our platform. All members are obligated to adhere to the following financial rules to ensure the fair use and distribution of time credits:
+                </p>
+
+                <div className="space-y-4 ml-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">1. Negative Balance Restriction (Minimum 0 Hours)</h4>
+                    <p className="text-gray-700 leading-relaxed mb-2">
+                      No member's TimeBank balance may fall into the negative.
+                    </p>
+                    <div className="bg-red-50 border-l-4 border-red-400 p-3 rounded ml-4">
+                      <p className="font-medium text-gray-900 mb-1">0 Hour Rule:</p>
+                      <p className="text-gray-700 text-sm">
+                        When your balance reaches 0 (zero) hours, your authorization to request services is automatically suspended.
+                      </p>
+                      <p className="font-medium text-gray-900 mt-2 mb-1">Reactivation:</p>
+                      <p className="text-gray-700 text-sm">
+                        To regain the authority to receive services, you must first increase your balance by providing services to the community.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">2. Maximum Balance Restriction (Maximum 10 Hours)</h4>
+                    <p className="text-gray-700 leading-relaxed mb-2">
+                      A maximum balance limit has been set to encourage the system to remain in an active cycle.
+                    </p>
+                    <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded ml-4">
+                      <p className="font-medium text-gray-900 mb-1">10 Hour Rule:</p>
+                      <p className="text-gray-700 text-sm">
+                        When your TimeBank balance reaches 10 hours, you are automatically prevented from earning additional credits by offering new services.
+                      </p>
+                      <p className="font-medium text-gray-900 mt-2 mb-1">Balancing Obligation:</p>
+                      <p className="text-gray-700 text-sm">
+                        To provide more services, you must use your accumulated time credit (to drop below 10 hours) by requesting services from the community.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">3. Credit Transfer Approval and Pending Credit</h4>
+                    <p className="text-gray-700 leading-relaxed mb-2">
+                      The credit transfer process is based on transparency and mutual trust.
+                    </p>
+                    <div className="space-y-2 ml-4">
+                      <div>
+                        <p className="font-medium text-gray-900">Pending Credit:</p>
+                        <p className="text-gray-700 text-sm">
+                          When a service request is accepted by the service provider, the estimated duration of the service is immediately deducted from the requestor's balance and appears as "Pending Credit" on the service provider's profile. This credit cannot be used by the service provider until it is actually transferred.
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">Final Transfer:</p>
+                        <p className="text-gray-700 text-sm">
+                          The credit transfer is finalized with the mutual and separate approval of both the party requesting the service and the party providing the service, following the completion of the service. Until the approval process is complete, the service duration continues to be reserved in the requestor's account.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section II */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">II. Volunteering and Ethical Principles</h3>
+                
+                <div className="space-y-4 ml-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">4. Respect and Professionalism</h4>
+                    <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm ml-4">
+                      <li>A respectful, honest, and constructive language must be used in all interactions.</li>
+                      <li>All offered or requested services must be fulfilled in accordance with the stated terms and the agreed-upon timeline.</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">5. Service Quality and Feedback</h4>
+                    <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm ml-4">
+                      <li>Members are obligated to provide services with reasonable and conscientious care.</li>
+                      <li>In case of detected abuse or attempted fraud, membership may be immediately and permanently terminated.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Acceptance Checkbox */}
+              <div className="flex items-start space-x-3 pt-4 border-t border-gray-200">
+                <Checkbox 
+                  id="rules-accept" 
+                  className="mt-0.5"
+                  checked={rulesAccepted}
+                  onCheckedChange={(checked) => setRulesAccepted(!!checked)}
+                />
+                <Label
+                  htmlFor="rules-accept"
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  I have read, understood, and accept The Hive Community Rules and the operating principles of the TimeBank system above.
+                </Label>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowRulesDialog(false)}
+              >
+                Close
+              </Button>
+              <Button
+                onClick={handleAcceptRules}
+                disabled={!rulesAccepted}
+                className="bg-primary hover:bg-primary/90"
+              >
+                Accept and Continue
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

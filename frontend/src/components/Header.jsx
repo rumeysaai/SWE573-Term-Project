@@ -185,11 +185,10 @@ export function Header() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Check if there are waiting proposals
+  // Check if there are waiting proposals (only received proposals, not sent ones)
   const hasWaitingProposal = useMemo(() => {
-    return sentProposals.some(p => p.status === 'waiting' || p.status === 'pending') ||
-           receivedProposals.some(p => p.status === 'waiting' || p.status === 'pending');
-  }, [sentProposals, receivedProposals]);
+    return receivedProposals.some(p => p.status === 'waiting' || p.status === 'pending');
+  }, [receivedProposals]);
 
   // Login/Register sayfalarında header gösterme
   if (location.pathname === '/login' || location.pathname === '/register') {
@@ -271,7 +270,7 @@ export function Header() {
             >
               <Bell className="w-5 h-5 text-primary" />
               {hasWaitingProposal && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full"></span>
               )}
             </Button>
           </div>
@@ -287,7 +286,7 @@ export function Header() {
               <MessageCircle className="w-5 h-5 text-primary" />
             </Button>
             {unreadMessageCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full z-10"></span>
+              <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full z-10"></span>
             )}
           </div>
 
@@ -306,11 +305,11 @@ export function Header() {
                 <img 
                   src={user.profile.avatar} 
                   alt={user.username}
-                  className="w-10 h-10 rounded-full object-cover border-2 border-primary/20"
+                  className="w-14 h-14 rounded-full object-cover border-2 border-primary/20 aspect-square"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-gray-200 border-2 border-primary/20 flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600">
+                <div className="w-14 h-14 rounded-full bg-gray-200 border-2 border-primary/20 flex items-center justify-center aspect-square">
+                  <span className="text-base font-medium text-gray-600">
                     {user?.username?.charAt(0).toUpperCase() || 'U'}
                   </span>
                 </div>

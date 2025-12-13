@@ -20,7 +20,7 @@ export default function Chat() {
     if (!user) return;
     
     try {
-      // Don't show loading if we're just refreshing the list
+      
       if (!chats.length) {
         setLoading(true);
       }
@@ -30,24 +30,22 @@ export default function Chat() {
         : (response.data?.results || []);
       setChats(chatsData);
       
-      // Only update selected chat if explicitly requested and chatIdFromUrl exists
+      
       if (updateSelectedChat && chatIdFromUrl) {
         const chatToSelect = chatsData.find(chat => chat.id.toString() === chatIdFromUrl.toString());
         if (chatToSelect) {
           setSelectedChat(chatToSelect);
-          // Clear URL parameter after selecting
+          
           const newSearchParams = new URLSearchParams(searchParams);
           newSearchParams.delete('chatId');
           setSearchParams(newSearchParams, { replace: true });
         }
       } else if (preserveSelectedChatId && !updateSelectedChat) {
-        // Only update selectedChat if we're preserving a specific chat ID
-        // and the ID still exists in the new data
         const preservedChat = chatsData.find(c => c.id === preserveSelectedChatId);
         if (preservedChat) {
-          // Use functional update to avoid closure issues
+         
           setSelectedChat(prev => {
-            // Only update if ID matches and it's actually different
+            
             if (prev && prev.id === preserveSelectedChatId) {
               return preservedChat;
             }
@@ -70,15 +68,15 @@ export default function Chat() {
     }
   };
 
-  // Initial fetch and when chatIdFromUrl changes
+  
   useEffect(() => {
     if (user) {
-      fetchChats(true, null); // Update selected chat if chatIdFromUrl exists
+      fetchChats(true, null); 
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [user, chatIdFromUrl]);
   
-  // Separate effect for message updates to avoid loops - only refresh chat list, don't change selection
+  
   useEffect(() => {
     if (!user) return;
     
@@ -87,10 +85,7 @@ export default function Chat() {
       // Debounce to avoid too many rapid updates
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
-        // Get current selected chat ID before fetching to preserve it
         const currentSelectedChatId = selectedChat?.id;
-        // Only refresh the chat list, preserve selected chat ID but don't force update
-        // Passing null as preserveSelectedChatId means we won't update selectedChat at all
         fetchChats(false, currentSelectedChatId);
       }, 300);
     };
@@ -101,8 +96,7 @@ export default function Chat() {
       clearTimeout(timeoutId);
       window.removeEventListener('messageUpdated', handleMessageUpdate);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, selectedChat?.id]); // Include selectedChat.id so we capture it in closure
+  }, [user, selectedChat?.id]); 
 
   if (loading) {
     return (

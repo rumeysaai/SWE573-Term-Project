@@ -104,12 +104,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     )
     location = serializers.CharField(required=False, allow_blank=True, write_only=True)
     bio = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    birth_date = serializers.DateField(required=True, write_only=True, help_text="User's birth date (must be 18+ years old)")
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'first_name', 'last_name', 'password', 'password2', 'interested_tags', 'location', 'bio']
+        fields = ['username', 'email', 'first_name', 'last_name', 'password', 'password2', 'interested_tags', 'location', 'bio', 'birth_date']
 
     def validate(self, attrs):
+        from datetime import date
         
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Passwords do not match."})
@@ -119,6 +121,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         
         if User.objects.filter(username=attrs['username']).exists():
             raise serializers.ValidationError({"username": "This username is already taken."})
+        
+        # Age validation: must be 18 or older
+        if 'birth_date' in attrs and attrs['birth_date']:
+            today = date.today()
+            age = today.year - attrs['birth_date'].year - ((today.month, today.day) < (attrs['birth_date'].month, attrs['birth_date'].day))
+            if age < 18:
+                raise serializers.ValidationError({"birth_date": "You must be at least 18 years old to register."})
 
         return attrs
 
@@ -127,6 +136,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         interested_tags_data = validated_data.pop('interested_tags', [])
         location = validated_data.pop('location', None)
         bio = validated_data.pop('bio', None)
+        birth_date = validated_data.pop('birth_date', None)
         first_name = validated_data.pop('first_name', '')
         last_name = validated_data.pop('last_name', '')
         
@@ -142,11 +152,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         # ❗ STARTING BONUS
         user.profile.time_balance = 3.0  # 3 hour bonus
         
-        # Set location and bio if provided
+        # Set location, bio, and birth_date if provided
         if location:
             user.profile.location = location
         if bio:
             user.profile.bio = bio
+        if birth_date:
+            user.profile.birth_date = birth_date
         
         # Process interested_tags: can be list of IDs or list of tag objects with name/text
         tag_objects = []
@@ -335,6 +347,7 @@ class PostSerializer(serializers.ModelSerializer):
             'frequency',
             'participant_count',
             'date',
+            'time',
             'latitude',
             'longitude',
             'image',

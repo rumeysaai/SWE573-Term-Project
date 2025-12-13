@@ -75,7 +75,6 @@ export default function Review() {
           return;
         }
 
-        // Check if user can review based on approval status
         // For both offer and need: user can review if they have approved OR declined
         let canReview = false;
         
