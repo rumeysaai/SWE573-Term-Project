@@ -227,11 +227,22 @@ class PostViewSet(viewsets.ModelViewSet):
         Query parameters: min_lat, max_lat, min_lon, max_lon
         """
         # Optimize queries with select_related and prefetch_related
+        # Use only() to fetch only required fields for better performance
         queryset = Post.objects.select_related(
             'posted_by',
             'posted_by__profile'
         ).prefetch_related(
             'tags'
+        ).only(
+            # Post fields
+            'id', 'title', 'description', 'post_type', 'location', 'duration', 'frequency',
+            'participant_count', 'date', 'time', 'latitude', 'longitude', 'image', 'created_at',
+            # Posted_by fields
+            'posted_by__id', 'posted_by__username',
+            # Profile fields
+            'posted_by__profile__avatar',
+            # Foreign keys
+            'posted_by_id'
         ).order_by('-created_at')
         
         # Non-staff users only see non-hidden posts
@@ -281,7 +292,8 @@ class UserProfileView(APIView):
 
     def get(self, request, username, *args, **kwargs):
         try:
-            user = User.objects.get(username=username)
+            # Optimize query with select_related and prefetch_related
+            user = User.objects.select_related('profile').prefetch_related('profile__interested_tags').get(username=username)
             # Use UserSerializer with request context and include_reviews=true to get review_averages
             # Create a modified request with include_reviews=true parameter
             class ModifiedRequest:
@@ -373,11 +385,14 @@ class MyProfileView(APIView):
                     logger.error(f"Error calculating review_averages for user {user.username}: {e}")
                     user_data['profile']['review_averages'] = None
         
-        # Fetch reviews received by this user (same as UserProfileView)
-        from .models import Review
-        reviews = Review.objects.filter(reviewed_user=user).select_related('reviewer', 'proposal', 'proposal__post').order_by('-created_at')
-        reviews_data = ReviewSerializer(reviews, many=True).data
-        user_data['reviews'] = reviews_data
+        # Fetch reviews received by this user ONLY if include_reviews=true (conditional)
+        if request.query_params.get('include_reviews') == 'true':
+            from .models import Review
+            reviews = Review.objects.filter(reviewed_user=user).select_related('reviewer', 'proposal', 'proposal__post').order_by('-created_at')
+            reviews_data = ReviewSerializer(reviews, many=True).data
+            user_data['reviews'] = reviews_data
+        else:
+            user_data['reviews'] = []
         
         return Response(user_data)
 
@@ -545,14 +560,17 @@ class ProposalViewSet(viewsets.ModelViewSet):
         # Use only() to fetch only required fields for better performance
         queryset = Proposal.objects.select_related(
             'requester',
+            'requester__profile',  # Moved up for better join order
             'provider',
+            'provider__profile',  # Moved up for better join order
             'post',
-            'requester__profile',
-            'provider__profile'
+            'post__posted_by',  # For post_details
+            'post__posted_by__profile'  # For post_details avatar
         ).prefetch_related(
             'jobs',
             'jobs__cancelled_by',
-            'reviews'
+            'reviews',
+            'post__tags'  # For post_details tags
         ).only(
             # Proposal fields
             'id', 'status', 'created_at', 'updated_at',
@@ -564,8 +582,12 @@ class ProposalViewSet(viewsets.ModelViewSet):
             # Provider fields
             'provider__id', 'provider__username', 'provider__first_name', 'provider__last_name',
             'provider__profile__avatar',
-            # Post fields
-            'post__id', 'post__title', 'post__post_type',
+            # Post fields - expanded for post_details
+            'post__id', 'post__title', 'post__post_type', 'post__description', 'post__location',
+            'post__duration', 'post__frequency', 'post__participant_count', 'post__date', 'post__time',
+            'post__latitude', 'post__longitude', 'post__image', 'post__created_at',
+            'post__posted_by__id', 'post__posted_by__username',
+            'post__posted_by__profile__avatar',  # For post_details avatar
             # Foreign keys
             'post_id', 'requester_id', 'provider_id'
         )
@@ -580,7 +602,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
         target_user = None
         if username:
             try:
-                target_user = User.objects.get(username=username)
+                target_user = User.objects.select_related('profile').only('id', 'username', 'profile__avatar').get(username=username)
             except User.DoesNotExist:
                 pass
         

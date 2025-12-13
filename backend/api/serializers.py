@@ -392,16 +392,81 @@ class ProposalSerializer(serializers.ModelSerializer):
     post_id = serializers.IntegerField(source='post.id', read_only=True, allow_null=True)
     post_title = serializers.CharField(source='post.title', read_only=True, allow_null=True)
     post_type = serializers.CharField(source='post.post_type', read_only=True, allow_null=True)
+    post_details = serializers.SerializerMethodField()
     requester_id = serializers.IntegerField(source='requester.id', read_only=True)
     requester_username = serializers.CharField(source='requester.username', read_only=True)
-    requester_avatar = serializers.CharField(source='requester.profile.avatar_url', read_only=True)
+    requester_avatar = serializers.SerializerMethodField()
     provider_id = serializers.IntegerField(source='provider.id', read_only=True)
     provider_username = serializers.CharField(source='provider.username', read_only=True)
-    provider_avatar = serializers.CharField(source='provider.profile.avatar_url', read_only=True)
+    provider_avatar = serializers.SerializerMethodField()
+    
+    def get_requester_avatar(self, obj):
+        """Get requester avatar - optimized: use direct field access (already selected_related)"""
+        # Profile is already loaded via select_related('requester__profile')
+        # Direct field access is faster than property call
+        try:
+            avatar = obj.requester.profile.avatar
+            return avatar if avatar else "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"
+        except AttributeError:
+            return "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"
+    
+    def get_provider_avatar(self, obj):
+        """Get provider avatar - optimized: use direct field access (already selected_related)"""
+        # Profile is already loaded via select_related('provider__profile')
+        # Direct field access is faster than property call
+        try:
+            avatar = obj.provider.profile.avatar
+            return avatar if avatar else "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"
+        except AttributeError:
+            return "https://placehold.co/100x100/EBF8FF/3B82F6?text=User"
     has_reviewed = serializers.SerializerMethodField()
     can_review = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+    
+    def get_post_details(self, obj):
+        """Embed post details to avoid N+1 queries in frontend - optimized"""
+        if not obj.post:
+            return None
+        
+        # Use prefetched post if available (from select_related in ViewSet)
+        post = obj.post
+        
+        # Get tags - use prefetched if available (optimized)
+        tags = getattr(post, '_prefetched_objects_cache', {}).get('tags', None)
+        if tags is not None:
+            # Use list comprehension for faster iteration
+            tag_names = [tag.name for tag in tags]
+        else:
+            tag_names = list(post.tags.values_list('name', flat=True))
+        
+        # Optimize: Access posted_by directly (already selected_related)
+        posted_by = post.posted_by
+        posted_by_id = posted_by.id if posted_by else None
+        posted_by_username = posted_by.username if posted_by else None
+        
+        # Optimize: Access created_at directly (already in only())
+        created_at = post.created_at.isoformat() if post.created_at else None
+        
+        return {
+            'id': post.id,
+            'title': post.title,
+            'description': post.description,
+            'location': post.location,
+            'post_type': post.post_type,
+            'tags': tag_names,
+            'duration': post.duration,
+            'frequency': post.frequency,
+            'participant_count': post.participant_count,
+            'date': post.date,
+            'time': post.time,
+            'latitude': post.latitude,
+            'longitude': post.longitude,
+            'image': post.image,
+            'posted_by_id': posted_by_id,
+            'posted_by_username': posted_by_username,
+            'created_at': created_at,
+        }
     
     def get_has_reviewed(self, obj):
         """Check if current user has reviewed this proposal"""
@@ -431,7 +496,6 @@ class ProposalSerializer(serializers.ModelSerializer):
             return False
         
         # Check if user has approved OR cancelled the job
-        # Only use prefetched jobs to avoid N+1 queries
         jobs = getattr(obj, '_prefetched_objects_cache', {}).get('jobs', None)
         if jobs is not None:
             job = jobs[0] if jobs else None
@@ -547,6 +611,7 @@ class ProposalSerializer(serializers.ModelSerializer):
             'post_id',
             'post_title',
             'post_type',
+            'post_details',  
             'requester',
             'requester_id',
             'requester_username',

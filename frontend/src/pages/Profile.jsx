@@ -41,6 +41,7 @@ export default function Profile() {
   const [visibleOfferCount, setVisibleOfferCount] = useState(3);
   const [visibleNeedCount, setVisibleNeedCount] = useState(3);
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(3);
+  const [visibleReviewCount, setVisibleReviewCount] = useState(3);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -67,50 +68,18 @@ export default function Profile() {
           setReviews(profileResponse.data.reviews);
         }
         
-        // Fetch interested tags if available
-        const interestedTagIds = profileResponse.data?.profile?.interested_tags || [];
-        console.log('Profile: interested_tag_ids from backend:', interestedTagIds);
+        // Use interested_tags_details from backend (already included in UserSerializer)
+        const interestedTagsDetails = profileResponse.data?.profile?.interested_tags_details || [];
+        console.log('Profile: interested_tags_details from backend:', interestedTagsDetails);
         
-        if (interestedTagIds.length > 0) {
-          try {
-            const tagsResponse = await api.get('/tags/');
-            let allTagsData = [];
-            if (Array.isArray(tagsResponse.data)) {
-              allTagsData = tagsResponse.data;
-            } else if (tagsResponse.data && typeof tagsResponse.data === 'object') {
-              allTagsData = tagsResponse.data.results || [];
-            }
-            
-            console.log('Profile: fetched all tags count:', allTagsData.length);
-            
-            // Map tag IDs to tag objects
-            const tags = interestedTagIds.map(tagId => {
-              const tag = allTagsData.find(t => {
-                const tId = typeof t.id === 'string' ? parseInt(t.id, 10) : t.id;
-                const searchId = typeof tagId === 'string' ? parseInt(tagId, 10) : tagId;
-                return tId === searchId;
-              });
-              return tag ? {
-                id: tag.id,
-                name: tag.name || tag.label,
-                label: tag.label || tag.name,
-              } : null;
-            }).filter(Boolean);
-            
-            console.log('Profile: mapped interested tags:', tags);
-            if (tags.length > 0) {
-              setInterestedTags(tags);
-              console.log('Profile: setInterestedTags called with', tags.length, 'tags');
-            } else {
-              console.log('Profile: No tags matched, setting empty array');
-              setInterestedTags([]);
-            }
-          } catch (error) {
-            console.error('Error fetching interested tags:', error);
-            setInterestedTags([]);
-          }
+        if (interestedTagsDetails.length > 0) {
+          const tags = interestedTagsDetails.map(tag => ({
+            id: tag.id,
+            name: tag.name || tag.label,
+            label: tag.label || tag.name,
+          }));
+          setInterestedTags(tags);
         } else {
-          console.log('Profile: No interested tags found in profile data, setting empty array');
           setInterestedTags([]);
         }
         
@@ -143,14 +112,12 @@ export default function Profile() {
         // Get user ID from profile
         const userId = profileResponse.data.id;
 
-        // Fetch all proposals to find completed ones for this user
         // We need to get proposals where user is either requester or provider
         const [sentProposalsResponse, receivedProposalsResponse] = await Promise.all([
           api.get(`/proposals/?sent=true&username=${username}`),
           api.get(`/proposals/?received=true&username=${username}`),
         ]);
-
-        // Combine all proposals and filter by the profile user's ID
+       
         // Handle both array and paginated response formats
         const sentProposals = Array.isArray(sentProposalsResponse.data) 
           ? sentProposalsResponse.data 
@@ -230,54 +197,48 @@ export default function Profile() {
           post_type: p.post_type || p.post?.post_type
         })));
 
-        // Fetch post details for completed proposals
-        const completedJobsWithPosts = await Promise.all(
-          completedProposals.map(async (proposal) => {
-            try {
-              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
-              return {
-                proposalId: proposal.id,
-                post: postResponse.data,
-                timebank_hour: proposal.timebank_hour,
-                proposed_date: proposal.proposed_date,
-                updated_at: proposal.updated_at || proposal.updatedAt,
-              };
-            } catch (err) {
-              console.error('Error fetching post for proposal:', err);
-              return null;
-            }
-          })
-        );
+        // Use post_details from proposal to avoid N+1 queries (embedded in backend)
+        const completedJobsWithPosts = completedProposals.map((proposal) => {
+          // Use embedded post_details if available, otherwise fallback to post_id
+          const postData = proposal.post_details || (proposal.post_id ? { id: proposal.post_id } : null);
+          
+          if (!postData) {
+            return null;
+          }
+          
+          return {
+            proposalId: proposal.id,
+            post: postData,
+            timebank_hour: proposal.timebank_hour,
+            proposed_date: proposal.proposed_date,
+            updated_at: proposal.updated_at || proposal.updatedAt,
+          };
+        }).filter(job => job !== null);
 
-        // Filter out null values
-        const validJobs = completedJobsWithPosts.filter(job => job !== null);
-        setCompletedJobs(validJobs);
+        setCompletedJobs(completedJobsWithPosts);
 
-        // Fetch post details for cancelled job proposals
-        const cancelledJobsWithPosts = await Promise.all(
-          cancelledJobProposals.map(async (proposal) => {
-            try {
-              const postResponse = await api.get(`/posts/${proposal.post_id || proposal.post?.id}/`);
-              return {
-                proposalId: proposal.id,
-                post: postResponse.data,
-                timebank_hour: proposal.timebank_hour,
-                proposed_date: proposal.proposed_date,
-                updated_at: proposal.updated_at || proposal.updatedAt,
-                cancelled_by: proposal.job_cancelled_by_username,
-                cancellation_reason: proposal.job_cancellation_reason,
-                job_status: 'cancelled',
-              };
-            } catch (err) {
-              console.error('Error fetching post for cancelled proposal:', err);
-              return null;
-            }
-          })
-        );
+        // Use post_details from proposal to avoid N+1 queries (embedded in backend)
+        const cancelledJobsWithPosts = cancelledJobProposals.map((proposal) => {
+          // Use embedded post_details if available, otherwise fallback to post_id
+          const postData = proposal.post_details || (proposal.post_id ? { id: proposal.post_id } : null);
+          
+          if (!postData) {
+            return null;
+          }
+          
+          return {
+            proposalId: proposal.id,
+            post: postData,
+            timebank_hour: proposal.timebank_hour,
+            proposed_date: proposal.proposed_date,
+            updated_at: proposal.updated_at || proposal.updatedAt,
+            cancelled_by: proposal.job_cancelled_by_username,
+            cancellation_reason: proposal.job_cancellation_reason,
+            job_status: 'cancelled',
+          };
+        }).filter(job => job !== null);
 
-        // Filter out null values
-        const validCancelledJobs = cancelledJobsWithPosts.filter(job => job !== null);
-        setCancelledJobs(validCancelledJobs);
+        setCancelledJobs(cancelledJobsWithPosts);
       } catch (err) {
         console.error('Error fetching profile:', err);
         setError('Failed to load profile');
@@ -807,7 +768,8 @@ export default function Profile() {
                   </CardContent>
                 </Card>
               ) : (
-                reviews.map((review) => (
+                <>
+                  {reviews.slice(0, visibleReviewCount).map((review) => (
                   <Card key={review.id} className="border-primary/20">
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -897,7 +859,19 @@ export default function Profile() {
                       )}
                     </CardContent>
                   </Card>
-                ))
+                  ))}
+                  {reviews.length > visibleReviewCount && (
+                    <div className="flex justify-center pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => setVisibleReviewCount(prev => prev + 3)}
+                        className="w-full"
+                      >
+                        See More ({reviews.length - visibleReviewCount} more)
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </SimpleTabsContent>
           </SimpleTabs>
