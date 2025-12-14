@@ -87,19 +87,31 @@ class NotificationService {
    * Check for new proposals
    */
   async checkProposals(user) {
-    if (!user) return;
+    if (!user || !this.isPageVisible) return;
+    
+    // Prevent overlapping requests
+    if (this.pendingRequests.proposals) return;
+
+    // Cancel previous request if still pending
+    if (this.abortControllers.proposals) {
+      this.abortControllers.proposals.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    this.abortControllers.proposals = abortController;
+    this.pendingRequests.proposals = true;
 
     try {
-      const response = await api.get('/proposals/for-approval/', {
-        params: { page: 1, page_size: 10 }
+      // Use lightweight count endpoint that doesn't fetch images or proposal details
+      const response = await api.get('/proposals/for-approval/count/', {
+        signal: abortController.signal,
       });
       
-      const proposals = response.data.results || response.data || [];
+      // Check if request was aborted
+      if (abortController.signal.aborted) return;
       
-      // Count waiting/pending proposals
-      const waitingCount = proposals.filter(p => 
-        p.status === 'waiting' || p.status === 'pending'
-      ).length;
+      const waitingCount = response.data?.count || response.data?.waiting_count || 0;
 
       // Check if there are new proposals
       if (waitingCount > this.lastProposalCount && this.lastProposalCount > 0) {
