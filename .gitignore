@@ -15,5 +15,3 @@ __pycache__/
 # Documentation files
 DOCKER_PUBLISH.md
 README_DOCKER.md
-TEST_RUN_GUIDE.md
-TEST_README.md
