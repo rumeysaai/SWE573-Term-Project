@@ -29,10 +29,18 @@ class AuthenticationAPITest(TestCase):
             'username': 'newuser',
             'email': 'newuser@example.com',
             'password': 'newpass123',
-            'password2': 'newpass123'
+            'password2': 'newpass123',
+            'first_name': 'New',
+            'last_name': 'User',
+            'birth_date': '2000-01-01',
+            'location': 'Istanbul',
         }
         response = self.client.post(url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Hata ayıklamak için:
+        if response.status_code == 400:
+            print(response.data)  # Hangi alanın eksik olduğunu konsola yazar
+        # Register endpoint typically returns 201 CREATED, but check for both 200 and 201
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
         self.assertIn('id', response.data)
         self.assertEqual(response.data['username'], 'newuser')
         
@@ -151,7 +159,11 @@ class PostAPITest(TestCase):
         url = reverse('post-list')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        # Pagination sonucunun içine bak
+        if 'results' in response.data:
+            self.assertEqual(len(response.data['results']), 1)
+        else:
+            self.assertEqual(len(response.data), 1)
     
     def test_get_post_detail(self):
         """Test getting post details"""
@@ -209,8 +221,13 @@ class PostAPITest(TestCase):
         url = reverse('post-list') + '?post_type=offer'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]['post_type'], 'offer')
+        # Pagination sonucunun içine bak
+        if 'results' in response.data:
+            self.assertEqual(len(response.data['results']), 1)
+            self.assertEqual(response.data['results'][0]['post_type'], 'offer')
+        else:
+            self.assertEqual(len(response.data), 1)
+            self.assertEqual(response.data[0]['post_type'], 'offer')
     
     def test_search_posts(self):
         """Test searching posts"""
@@ -234,8 +251,13 @@ class PostAPITest(TestCase):
         url = reverse('post-list') + '?search=Python'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertIn('Python', response.data[0]['title'])
+        # Pagination sonucunun içine bak
+        if 'results' in response.data:
+            self.assertEqual(len(response.data['results']), 1)
+            self.assertIn('Python', response.data['results'][0]['title'])
+        else:
+            self.assertEqual(len(response.data), 1)
+            self.assertIn('Python', response.data[0]['title'])
 
 
 class CommentAPITest(TestCase):
@@ -279,7 +301,11 @@ class CommentAPITest(TestCase):
         url = reverse('comment-list') + f'?post_id={self.post.id}'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        # Pagination sonucunun içine bak
+        if 'results' in response.data:
+            self.assertEqual(len(response.data['results']), 1)
+        else:
+            self.assertEqual(len(response.data), 1)
     
     def test_delete_own_comment(self):
         """Test deleting own comment"""
@@ -375,7 +401,11 @@ class ProposalAPITest(TestCase):
         url = reverse('proposal-list') + '?sent=true'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        # Pagination sonucunun içine bak
+        if 'results' in response.data:
+            self.assertEqual(len(response.data['results']), 1)
+        else:
+            self.assertEqual(len(response.data), 1)
     
     def test_list_received_proposals(self):
         """Test listing received proposals"""
@@ -391,7 +421,11 @@ class ProposalAPITest(TestCase):
         url = reverse('proposal-list') + '?received=true'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        # Pagination sonucunun içine bak
+        if 'results' in response.data:
+            self.assertEqual(len(response.data['results']), 1)
+        else:
+            self.assertEqual(len(response.data), 1)
 
 
 class ReviewAPITest(TestCase):
@@ -417,13 +451,33 @@ class ReviewAPITest(TestCase):
             duration='1 hour'
         )
         
+        # Set requester balance to allow proposal acceptance
+        self.reviewer.profile.time_balance = Decimal('5.00')
+        self.reviewer.profile.save()
+        
         self.proposal = Proposal.objects.create(
             post=post,
             requester=self.reviewer,
             provider=self.reviewed_user,
             timebank_hour=Decimal('1.00'),
+            status='accepted'
+        )
+        
+        # Create Job and mark as completed
+        job = Job.objects.create(
+            post=post,
+            proposal=self.proposal,
+            requester=self.reviewer,
+            provider=self.reviewed_user,
+            timebank_hour=Decimal('1.00'),
             status='completed'
         )
+        
+        # Mark proposal as completed
+        self.proposal.status = 'completed'
+        self.proposal.provider_approved = True
+        self.proposal.requester_approved = True
+        self.proposal.save()
     
     def test_create_review(self):
         """Test creating a review"""

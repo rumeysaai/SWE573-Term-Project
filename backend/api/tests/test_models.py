@@ -507,15 +507,27 @@ class ChatModelTest(TestCase):
         self.assertEqual(chat.participant2, self.user2)
     
     def test_chat_unique_constraint(self):
-        """Test that one chat per pair of users"""
+        """Test that one chat per pair of users per post"""
+        post = Post.objects.create(
+            title='Test Post',
+            description='Test Description',
+            posted_by=self.user1,
+            post_type='offer',
+            location='Test Location',
+            duration='1 hour'
+        )
+        
+        # İlk chat
         Chat.objects.create(
+            post=post,
             participant1=self.user1,
             participant2=self.user2
         )
         
-        # Try to create another chat with same users
+        # İkinci chat (AYNI post, AYNI kişiler olmalı)
         with self.assertRaises(IntegrityError):
             Chat.objects.create(
+                post=post,
                 participant1=self.user1,
                 participant2=self.user2
             )

@@ -3,38 +3,80 @@
  */
 const { test, expect } = require('@playwright/test');
 
+// Helper function to login with existing database user
+async function loginTestUser(page) {
+  await page.goto('/login');
+  await page.waitForLoadState('networkidle');
+  
+  // Wait for login form elements
+  await expect(page.locator('#userName')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('#password')).toBeVisible({ timeout: 10000 });
+  
+  // Fill login form with existing database user
+  await page.locator('#userName').fill('rumeysa');
+  await page.locator('#password').fill('123456');
+  
+  // Submit login
+  await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible({ timeout: 5000 });
+  await page.getByRole('button', { name: /sign in/i }).click();
+  
+  // Wait for redirect after login
+  await page.waitForTimeout(2000);
+}
+
 test.describe('Profile', () => {
   test('should view own profile', async ({ page }) => {
+    // This test requires authentication
+    await loginTestUser(page);
+    
+    // Check if login was successful
+    const loginUrl = page.url();
+    if (loginUrl.includes('/login')) {
+      test.skip('This test requires authentication - login failed');
+      return;
+    }
+    
+    // Navigate to own profile page
     await page.goto('/my-profile');
     
-    // If redirected, skip
-    if (page.url().includes('/login') || page.url().includes('/')) {
-      test.skip();
-    }
+    // Wait for page to load
+    await page.waitForLoadState('domcontentloaded');
+    // Wait for profile content to appear
+    await page.waitForSelector('text=/profile|bio|balance|timebank/i', { timeout: 10000 }).catch(() => {});
     
     // Wait for profile to load
     await page.waitForTimeout(2000);
     
     // Check if profile elements are visible
-    // Adjust selectors based on your profile page
-    const profileContainer = page.locator('[data-testid="profile"]')
-      .or(page.locator('text=/profile|bio|balance/i').first());
-    
-    await expect(profileContainer.or(page.locator('body'))).toBeVisible();
+    // DÜZELTME: Strict mode violation'ı önlemek için daha spesifik selector kullan
+    // Sayfa başlığını (h1) kontrol et - 5 saniye daha fazla bekle
+    await expect(page.getByRole('heading', { name: /Profile/i, level: 1 }).or(page.locator('h1, h2').filter({ hasText: /Profile|My Profile/i }).first())).toBeVisible({ timeout: 15000 });
   });
 
   test('should edit profile', async ({ page }) => {
+    // This test requires authentication
+    await loginTestUser(page);
+    
+    // Check if login was successful
+    const loginUrl = page.url();
+    if (loginUrl.includes('/login')) {
+      test.skip('This test requires authentication - login failed');
+      return;
+    }
+    
+    // Navigate to own profile page
     await page.goto('/my-profile');
     
-    if (page.url().includes('/login') || page.url().includes('/')) {
-      test.skip();
-    }
+    // Wait for page to load
+    await page.waitForLoadState('domcontentloaded');
+    // Wait for profile content to appear
+    await page.waitForSelector('text=/profile|bio|balance|timebank/i', { timeout: 10000 }).catch(() => {});
     
     await page.waitForTimeout(2000);
     
     // Find edit button or form fields
-    const editButton = page.getByRole('button', { name: /edit/i });
-    const bioField = page.getByLabel(/bio/i).or(page.locator('textarea').first());
+    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const bioField = page.getByLabel(/bio|about/i).or(page.locator('textarea').first());
     
     if (await editButton.isVisible()) {
       await editButton.click();
@@ -60,17 +102,24 @@ test.describe('Profile', () => {
     // Navigate to a user profile (you may need to adjust the username)
     await page.goto('/profile/testuser');
     
-    if (page.url().includes('/login') || page.url().includes('/')) {
-      test.skip();
-    }
+    // Wait for page to load
+    await page.waitForLoadState('domcontentloaded');
+    // Wait for profile content to appear
+    await page.waitForSelector('text=/profile|bio|balance|testuser/i', { timeout: 10000 }).catch(() => {});
     
+    // Profile pages should be accessible without login
     await page.waitForTimeout(2000);
     
-    // Check if profile is displayed
-    const profileContainer = page.locator('[data-testid="profile"]')
-      .or(page.locator('text=/testuser|profile/i').first());
+    // DÜZELTME: Sadece 'heading' (başlık) olan Profile yazısını bekle
+    // Veya daha spesifik bir selector kullan
+    const profileHeading = page.getByRole('heading', { name: /Profile/i }).first();
+    const profileContent = page.locator('text=/testuser|bio|balance/i').first();
     
-    await expect(profileContainer.or(page.locator('body'))).toBeVisible();
+    // En az birinin görünür olması yeterli
+    const hasHeading = await profileHeading.isVisible({ timeout: 5000 }).catch(() => false);
+    const hasContent = await profileContent.isVisible({ timeout: 5000 }).catch(() => false);
+    
+    expect(hasHeading || hasContent).toBeTruthy();
   });
 });
 

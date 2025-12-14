@@ -1,6 +1,32 @@
 /**
  * UI interaction tests
  */
+// Mock react-router-dom (will use __mocks__/react-router-dom.js)
+jest.mock('react-router-dom');
+
+// Mock the useAuth hook
+jest.mock('../../App', () => ({
+  useAuth: jest.fn(),
+}));
+
+// HATA ÇÖZÜMÜ: TagSelector Mock
+jest.mock('../../components/TagSelector', () => {
+  const React = require('react');
+  return function DummyTagSelector({ value, onChange, placeholder, isMulti, isDisabled, showAllTagsOnOpen }) {
+    return React.createElement('input', {
+      'data-testid': 'tag-selector',
+      placeholder: placeholder,
+      value: Array.isArray(value) ? value.map(v => v.label || v.name).join(', ') : '',
+      onChange: (e) => {
+        if (onChange) {
+          onChange([{ value: e.target.value, label: e.target.value }]);
+        }
+      },
+      disabled: isDisabled,
+    });
+  };
+});
+
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
@@ -9,18 +35,6 @@ import Login from '../../pages/Login';
 import Signup from '../../pages/Signup';
 import * as App from '../../App';
 
-// Mock the useAuth hook
-jest.mock('../App', () => ({
-  useAuth: jest.fn(),
-}));
-
-// Mock react-router-dom
-const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => mockNavigate,
-  Link: ({ children, to }) => <a href={to}>{children}</a>,
-}));
 
 // Mock toast
 jest.mock('sonner', () => ({
@@ -30,11 +44,37 @@ jest.mock('sonner', () => ({
   },
 }));
 
+// Mock API for TagSelector
+const mockApiGet = jest.fn();
+const mockApiPost = jest.fn();
+
+jest.mock('../../api', () => ({
+  __esModule: true,
+  default: {
+    get: (...args) => mockApiGet(...args),
+    post: (...args) => mockApiPost(...args),
+    interceptors: {
+      request: { use: jest.fn() },
+      response: { use: jest.fn() },
+    },
+    defaults: {
+      baseURL: 'http://localhost:8000/api',
+      withCredentials: true,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  },
+}));
+
 const renderWithRouter = (component) => {
   return render(<BrowserRouter>{component}</BrowserRouter>);
 };
 
 describe('UI Interactions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockApiGet.mockResolvedValue({ data: [] }); // For TagSelector
+  });
+
   describe('Login Form Interactions', () => {
     const mockLogin = jest.fn();
 
@@ -46,21 +86,20 @@ describe('UI Interactions', () => {
     });
 
     test('user can fill and submit login form', async () => {
-      const user = userEvent.setup();
       mockLogin.mockResolvedValue(true);
 
       renderWithRouter(<Login />);
 
       const usernameInput = screen.getByLabelText(/username/i);
       const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /login/i });
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
 
       // Fill form
-      await user.type(usernameInput, 'testuser');
-      await user.type(passwordInput, 'password123');
+      await userEvent.type(usernameInput, 'testuser');
+      await userEvent.type(passwordInput, 'password123');
 
       // Submit form
-      await user.click(submitButton);
+      await userEvent.click(submitButton);
 
       await waitFor(() => {
         expect(mockLogin).toHaveBeenCalledWith('testuser', 'password123');
@@ -68,24 +107,22 @@ describe('UI Interactions', () => {
     });
 
     test('form validation prevents empty submission', async () => {
-      const user = userEvent.setup();
       renderWithRouter(<Login />);
 
-      const submitButton = screen.getByRole('button', { name: /login/i });
-      await user.click(submitButton);
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
+      await userEvent.click(submitButton);
 
       // Form should still be visible (validation prevents submission)
       expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     });
 
     test('user can navigate to signup from login', async () => {
-      const user = userEvent.setup();
       renderWithRouter(<Login />);
 
       const signupLink = screen.getByRole('link', { name: /sign up/i });
-      await user.click(signupLink);
+      await userEvent.click(signupLink);
 
-      expect(signupLink).toHaveAttribute('href', '/signup');
+      expect(signupLink).toHaveAttribute('href', '/register');
     });
   });
 
@@ -100,9 +137,7 @@ describe('UI Interactions', () => {
     });
 
     test('user can fill and submit signup form', async () => {
-      const user = userEvent.setup();
-      const api = require('../../api').default;
-      api.post = jest.fn().mockResolvedValue({
+      mockApiPost.mockResolvedValue({
         data: {
           id: 1,
           username: 'newuser',
@@ -110,29 +145,33 @@ describe('UI Interactions', () => {
       });
 
       renderWithRouter(<Signup />);
+      
+      // Wait for form to be ready
+      await waitFor(() => {
+        expect(screen.getByLabelText(/User Name/i)).toBeInTheDocument();
+      }, { timeout: 3000 });
 
-      const usernameInput = screen.getByLabelText(/username/i);
+      const usernameInput = screen.getByLabelText(/User Name/i);
       const emailInput = screen.getByLabelText(/email/i);
       const passwordInput = screen.getByLabelText(/password/i);
       const confirmPasswordInput = screen.getByLabelText(/confirm password/i);
       const submitButton = screen.getByRole('button', { name: /sign up/i });
 
       // Fill form
-      await user.type(usernameInput, 'newuser');
-      await user.type(emailInput, 'newuser@example.com');
-      await user.type(passwordInput, 'password123');
-      await user.type(confirmPasswordInput, 'password123');
+      await userEvent.type(usernameInput, 'newuser');
+      await userEvent.type(emailInput, 'newuser@example.com');
+      await userEvent.type(passwordInput, 'password123');
+      await userEvent.type(confirmPasswordInput, 'password123');
 
       // Submit form
-      await user.click(submitButton);
+      await userEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(api.post).toHaveBeenCalled();
+        expect(mockApiPost).toHaveBeenCalled();
       });
     });
 
     test('password mismatch shows error', async () => {
-      const user = userEvent.setup();
       const { toast } = require('sonner');
 
       renderWithRouter(<Signup />);
@@ -141,9 +180,9 @@ describe('UI Interactions', () => {
       const confirmPasswordInput = screen.getByLabelText(/confirm password/i);
       const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-      await user.type(passwordInput, 'password123');
-      await user.type(confirmPasswordInput, 'differentpass');
-      await user.click(submitButton);
+      await userEvent.type(passwordInput, 'password123');
+      await userEvent.type(confirmPasswordInput, 'differentpass');
+      await userEvent.click(submitButton);
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalled();
@@ -151,11 +190,10 @@ describe('UI Interactions', () => {
     });
 
     test('user can navigate to login from signup', async () => {
-      const user = userEvent.setup();
       renderWithRouter(<Signup />);
 
-      const loginLink = screen.getByRole('link', { name: /log in/i });
-      await user.click(loginLink);
+      const loginLink = screen.getByRole('link', { name: /Sign In/i });
+      await userEvent.click(loginLink);
 
       expect(loginLink).toHaveAttribute('href', '/login');
     });
@@ -163,7 +201,6 @@ describe('UI Interactions', () => {
 
   describe('Form Error Handling', () => {
     test('displays error message on login failure', async () => {
-      const user = userEvent.setup();
       const mockLogin = jest.fn().mockResolvedValue(false);
       const { toast } = require('sonner');
 
@@ -175,11 +212,11 @@ describe('UI Interactions', () => {
 
       const usernameInput = screen.getByLabelText(/username/i);
       const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /login/i });
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
 
-      await user.type(usernameInput, 'wronguser');
-      await user.type(passwordInput, 'wrongpass');
-      await user.click(submitButton);
+      await userEvent.type(usernameInput, 'wronguser');
+      await userEvent.type(passwordInput, 'wrongpass');
+      await userEvent.click(submitButton);
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith(
@@ -189,11 +226,9 @@ describe('UI Interactions', () => {
     });
 
     test('displays error message on signup failure', async () => {
-      const user = userEvent.setup();
-      const api = require('../../api').default;
       const { toast } = require('sonner');
 
-      api.post = jest.fn().mockRejectedValue({
+      mockApiPost.mockRejectedValue({
         response: {
           data: { error: 'Username already taken' },
         },
@@ -204,18 +239,23 @@ describe('UI Interactions', () => {
       });
 
       renderWithRouter(<Signup />);
+      
+      // Wait for form to be ready
+      await waitFor(() => {
+        expect(screen.getByLabelText(/User Name/i)).toBeInTheDocument();
+      }, { timeout: 3000 });
 
-      const usernameInput = screen.getByLabelText(/username/i);
+      const usernameInput = screen.getByLabelText(/User Name/i);
       const emailInput = screen.getByLabelText(/email/i);
       const passwordInput = screen.getByLabelText(/password/i);
       const confirmPasswordInput = screen.getByLabelText(/confirm password/i);
       const submitButton = screen.getByRole('button', { name: /sign up/i });
 
-      await user.type(usernameInput, 'existinguser');
-      await user.type(emailInput, 'existing@example.com');
-      await user.type(passwordInput, 'pass123');
-      await user.type(confirmPasswordInput, 'pass123');
-      await user.click(submitButton);
+      await userEvent.type(usernameInput, 'existinguser');
+      await userEvent.type(emailInput, 'existing@example.com');
+      await userEvent.type(passwordInput, 'pass123');
+      await userEvent.type(confirmPasswordInput, 'pass123');
+      await userEvent.click(submitButton);
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalled();
