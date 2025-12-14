@@ -413,10 +413,26 @@ export default function Proposal() {
     
     // Check if user already has a proposal for this post
     if (userProposals.length > 0) {
-      // Check if there's any proposal that's not completed or cancelled
+      // Check if there's any proposal that's active (not completed/cancelled)
+      // A proposal is active if:
+      // - status is NOT 'completed' and NOT 'cancelled'
+      // - AND job_status is NOT 'cancelled' and NOT 'completed' (cancelled/completed jobs allow new proposals)
       const activeProposal = userProposals.find(p => {
+        const status = p.status;
         const jobStatus = p.job_status || p.jobStatus;
-        return jobStatus !== 'completed' && jobStatus !== 'cancelled';
+        
+        // If status is completed or cancelled, proposal is not active
+        if (status === 'completed' || status === 'cancelled') {
+          return false;
+        }
+        
+        // If job_status is cancelled or completed, allow new proposals
+        if (jobStatus === 'cancelled' || jobStatus === 'completed') {
+          return false;
+        }
+        
+        // Otherwise, proposal is active
+        return true;
       });
       
       if (activeProposal) {
