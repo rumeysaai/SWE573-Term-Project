@@ -27,7 +27,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
-    "react-router-dom": "^7.9.5",
+    "react-router-dom": "^7.10.1",
     "react-scripts": "5.0.1",
     "react-select": "^5.8.1",
     "recharts": "^3.3.0",
@@ -39,12 +39,25 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
-    "test:unit": "react-scripts test --testPathPattern=test/unit_test",
+    "test": "react-scripts test --testPathPattern=test/unit_test --testPathIgnorePatterns=test/e2e",
+    "test:unit": "react-scripts test --testPathPattern=test/unit_test --testPathIgnorePatterns=test/e2e",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "eject": "react-scripts eject"
+  },
+  "jest": {
+    "testMatch": [
+      "**/test/unit_test/**/*.test.jsx",
+      "**/test/unit_test/**/*.test.js"
+    ],
+    "transformIgnorePatterns": [
+      "node_modules/(?!(axios|react-leaflet|date-fns)/)"
+    ],
+    "moduleNameMapper": {
+      "^react-leaflet$": "<rootDir>/src/__mocks__/react-leaflet.js",
+      "\\.(css|less|scss|sass)$": "<rootDir>/src/__mocks__/styleMock.js"
+    }
   },
   "eslintConfig": {
     "extends": [

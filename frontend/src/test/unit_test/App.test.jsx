@@ -1,17 +1,48 @@
 /**
  * Integration tests for App component
  */
+// Mock react-router-dom (will use __mocks__/react-router-dom.js)
+jest.mock('react-router-dom');
+
+// Mock react-leaflet (will use __mocks__/react-leaflet.js)
+jest.mock('react-leaflet');
+
+// Mock leaflet
+jest.mock('leaflet', () => ({
+  Icon: {
+    Default: {
+      prototype: {},
+      mergeOptions: jest.fn(),
+    },
+  },
+}));
+
+// Mock API
+const mockApiGet = jest.fn();
+const mockApiPost = jest.fn();
+
+jest.mock('../../api', () => ({
+  __esModule: true,
+  default: {
+    get: (...args) => mockApiGet(...args),
+    post: (...args) => mockApiPost(...args),
+    interceptors: {
+      request: { use: jest.fn() },
+      response: { use: jest.fn() },
+    },
+    defaults: {
+      baseURL: 'http://localhost:8000/api',
+      withCredentials: true,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  },
+}));
+
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import App from '../../App';
 import api from '../../api';
-
-// Mock API
-jest.mock('../api', () => ({
-  get: jest.fn(),
-  post: jest.fn(),
-}));
 
 // Mock toast
 jest.mock('sonner', () => ({
@@ -29,11 +60,11 @@ const renderApp = () => {
 describe('App Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockApiGet.mockResolvedValue({ data: { success: 'CSRF cookie set' } });
   });
 
   test('renders app without crashing', () => {
-    api.get.mockResolvedValue({ data: { success: 'CSRF cookie set' } });
-    api.get.mockResolvedValueOnce({ data: null }); // Session check
+    mockApiGet.mockResolvedValueOnce({ data: null }); // Session check
     
     renderApp();
     
@@ -42,30 +73,28 @@ describe('App Component', () => {
   });
 
   test('fetches CSRF token on mount', async () => {
-    api.get.mockResolvedValue({ data: { success: 'CSRF cookie set' } });
-    api.get.mockResolvedValueOnce({ data: null }); // Session check
+    mockApiGet.mockResolvedValueOnce({ data: null }); // Session check
     
     renderApp();
     
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/csrf/');
+      expect(mockApiGet).toHaveBeenCalledWith('/csrf/');
     });
   });
 
   test('checks session on mount', async () => {
-    api.get.mockResolvedValue({ data: { success: 'CSRF cookie set' } });
-    api.get.mockResolvedValueOnce({ data: null }); // Session check
+    mockApiGet.mockResolvedValueOnce({ data: null }); // Session check
     
     renderApp();
     
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/session/');
+      expect(mockApiGet).toHaveBeenCalledWith('/session/');
     });
   });
 
   test('handles session check failure gracefully', async () => {
-    api.get.mockRejectedValueOnce(new Error('Network error'));
-    api.get.mockRejectedValueOnce(new Error('Network error'));
+    mockApiGet.mockRejectedValueOnce(new Error('Network error'));
+    mockApiGet.mockRejectedValueOnce(new Error('Network error'));
     
     renderApp();
     

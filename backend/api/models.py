@@ -218,6 +218,7 @@ class Proposal(models.Model):
         is_being_accepted = False
         was_accepted = False
         was_cancelled = False
+        should_create_job = False
         
         if self.pk:
             try:
@@ -236,18 +237,18 @@ class Proposal(models.Model):
         # Handle accepted status - create Job and deduct balance
         if is_being_accepted:
             # Check if Job already exists for this proposal
-            existing_job = self.jobs.filter(status='waiting').first()
+            # Only check if proposal is already saved (has primary key)
+            existing_job = None
+            if self.pk:
+                existing_job = self.jobs.filter(status='waiting').first()
+            
             if not existing_job:
                 # Create Job with waiting status only if it doesn't exist
-                Job.objects.create(
-                    post=self.post,
-                    proposal=self,
-                    requester=self.requester,
-                    provider=self.provider,
-                    timebank_hour=self.timebank_hour,
-                    status='waiting',
-                    date=self.proposed_date
-                )
+                # Note: Job will be created after proposal is saved (see below)
+                # We'll create it after super().save() if this is a new proposal
+                should_create_job = True
+            else:
+                should_create_job = False
             
             # Check balance and deduct based on post type
             if self.post.post_type == 'offer':
@@ -314,6 +315,20 @@ class Proposal(models.Model):
                         requester_profile.save()
         
         super().save(*args, **kwargs)
+        
+        # Create Job after proposal is saved (if it's a new proposal being accepted)
+        if is_being_accepted and should_create_job:
+            # Double-check that Job doesn't exist (in case it was created elsewhere)
+            if not self.jobs.filter(status='waiting').exists():
+                Job.objects.create(
+                    post=self.post,
+                    proposal=self,
+                    requester=self.requester,
+                    provider=self.provider,
+                    timebank_hour=self.timebank_hour,
+                    status='waiting',
+                    date=self.proposed_date
+                )
 
     def __str__(self):
         return f"{self.requester.username} -> {self.post.title} ({self.status})"
