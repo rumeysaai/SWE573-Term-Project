@@ -288,7 +288,7 @@ class NotificationService {
     this.isRunning = true;
     this.currentUser = user;
     const {
-      proposalInterval = 30000, // 30 seconds
+      proposalInterval = 60000, // 60 seconds (1 minute)
       messageInterval = 20000,  // 20 seconds
       timeBalanceInterval = 30000, // 30 seconds
       initialDelay = 2000, // Delay initial checks to let page load first

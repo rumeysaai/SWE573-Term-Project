@@ -113,9 +113,10 @@ export default function Profile() {
         const userId = profileResponse.data.id;
 
         // We need to get proposals where user is either requester or provider
+        // exclude_images=true to reduce payload size - images not needed in profile view
         const [sentProposalsResponse, receivedProposalsResponse] = await Promise.all([
-          api.get(`/proposals/?sent=true&username=${username}`),
-          api.get(`/proposals/?received=true&username=${username}`),
+          api.get(`/proposals/?sent=true&username=${username}&exclude_images=true`),
+          api.get(`/proposals/?received=true&username=${username}&exclude_images=true`),
         ]);
        
         // Handle both array and paginated response formats

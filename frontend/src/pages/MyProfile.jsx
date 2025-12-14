@@ -139,9 +139,10 @@ export default function MyProfile() {
         const userId = userData.id;
         
         // Fetch all proposals to find completed ones for this user
+        // exclude_images=true to reduce payload size - images not needed here
         const [sentProposalsResponse, receivedProposalsResponse] = await Promise.all([
-          api.get(`/proposals/?sent=true&username=${user?.username}`),
-          api.get(`/proposals/?received=true&username=${user?.username}`),
+          api.get(`/proposals/?sent=true&username=${user?.username}&exclude_images=true`),
+          api.get(`/proposals/?received=true&username=${user?.username}&exclude_images=true`),
         ]);
         
         // Combine all proposals
@@ -873,9 +874,10 @@ export default function MyProfile() {
     const calculateStats = async () => {
       try {
         // Fetch all proposals
+        // exclude_images=true to reduce payload size - images not needed for stats calculation
         const [sentResponse, receivedResponse] = await Promise.all([
-          api.get('/proposals/?sent=true'),
-          api.get('/proposals/?received=true'),
+          api.get('/proposals/?sent=true&exclude_images=true'),
+          api.get('/proposals/?received=true&exclude_images=true'),
         ]);
 
         const sentProposals = Array.isArray(sentResponse.data) 

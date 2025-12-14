@@ -135,7 +135,7 @@ export default function App() {
       // Reset counters and start polling
       notificationService.reset();
       notificationService.start(user, {
-        proposalInterval: 30000, // Check proposals every 30 seconds
+        proposalInterval: 60000, // Check proposals every 1 minute
         messageInterval: 20000,  // Check messages every 20 seconds
         timeBalanceInterval: 30000, // Check time balance every 30 seconds
       });

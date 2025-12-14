@@ -412,7 +412,8 @@ export default function PostDetails() {
                   setCheckingProposal(true);
                   try {
                     // Check if user already has a proposal for this post
-                    const response = await api.get('/proposals/', { params: { sent: 'true' } });
+                    // exclude_images=true to reduce payload size - images not needed for this check
+                    const response = await api.get('/proposals/', { params: { sent: 'true', exclude_images: 'true' } });
                     const sentProposals = Array.isArray(response.data) ? response.data : (response.data?.results || []);
                     const existingProposal = sentProposals.find(p => p.post_id === parseInt(postId));
                     

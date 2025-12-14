@@ -461,10 +461,11 @@ export default function Proposal() {
     if (postDetails?.type === 'offer') {
       try {
         // Fetch user's current balance and proposals
+        // exclude_images=true to reduce payload size - images not needed for balance calculation
         const [userResponse, sentResponse, receivedResponse] = await Promise.all([
           api.get('/users/me/'),
-          api.get('/proposals/?sent=true'),
-          api.get('/proposals/?received=true'),
+          api.get('/proposals/?sent=true&exclude_images=true'),
+          api.get('/proposals/?received=true&exclude_images=true'),
         ]);
 
         const currentBalance = userResponse.data?.profile?.time_balance || 0;
