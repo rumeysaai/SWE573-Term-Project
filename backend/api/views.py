@@ -571,7 +571,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
             'jobs__cancelled_by',
             'reviews',
             'post__tags'  # For post_details tags
-        ).only(
+        )
+        
+        # Check if images should be excluded to reduce database load
+        exclude_images = self.request.query_params.get('exclude_images', 'false').lower() == 'true'
+        
+        # Base fields that are always needed
+        only_fields = [
             # Proposal fields
             'id', 'status', 'created_at', 'updated_at',
             'notes', 'timebank_hour', 'proposed_date', 'proposed_time', 'proposed_location',
@@ -585,12 +591,18 @@ class ProposalViewSet(viewsets.ModelViewSet):
             # Post fields - expanded for post_details
             'post__id', 'post__title', 'post__post_type', 'post__description', 'post__location',
             'post__duration', 'post__frequency', 'post__participant_count', 'post__date', 'post__time',
-            'post__latitude', 'post__longitude', 'post__image', 'post__created_at',
+            'post__latitude', 'post__longitude', 'post__created_at',
             'post__posted_by__id', 'post__posted_by__username',
             'post__posted_by__profile__avatar',  # For post_details avatar
             # Foreign keys
             'post_id', 'requester_id', 'provider_id'
-        )
+        ]
+        
+        # Only include image field if not excluded (saves database bandwidth)
+        if not exclude_images:
+            only_fields.append('post__image')
+        
+        queryset = queryset.only(*only_fields)
         
         # Filter by post ID if provided
         post_id = self.request.query_params.get('post', None)
@@ -620,6 +632,14 @@ class ProposalViewSet(viewsets.ModelViewSet):
         
         return queryset.order_by('-created_at')
 
+    def get_serializer_context(self):
+        """Add custom context for serializer"""
+        context = super().get_serializer_context()
+        # Check if images should be excluded from post_details
+        exclude_images = self.request.query_params.get('exclude_images', 'false').lower() == 'true'
+        context['exclude_images'] = exclude_images
+        return context
+    
     def perform_create(self, serializer):
         """Set the requester to the current authenticated user and provider to the post owner"""
         post = serializer.validated_data['post']
@@ -633,6 +653,9 @@ class ProposalViewSet(viewsets.ModelViewSet):
         Optimized with only() to fetch only required fields
         """
         user = request.user
+        
+        # Check if images should be excluded to reduce database load and payload size
+        exclude_images = request.query_params.get('exclude_images', 'false').lower() == 'true'
         
         # Get optimized queryset with only() to reduce payload size
         from django.db.models import Q
@@ -648,7 +671,10 @@ class ProposalViewSet(viewsets.ModelViewSet):
             'reviews'
         ).filter(
             Q(requester=user) | Q(provider=user)
-        ).only(
+        )
+        
+        # Base fields that are always needed
+        only_fields = [
             # Proposal fields
             'id', 'status', 'created_at', 'updated_at',
             'notes', 'timebank_hour', 'proposed_date', 'proposed_time', 'proposed_location',
@@ -663,7 +689,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
             'post__id', 'post__title', 'post__post_type', 'post__location',
             # Foreign keys
             'post_id', 'requester_id', 'provider_id'
-        ).order_by('-created_at')
+        ]
+        
+        # Only include image field if not excluded (saves significant bandwidth)
+        if not exclude_images:
+            only_fields.append('post__image')
+        
+        queryset = queryset.only(*only_fields).order_by('-created_at')
         
         # Use pagination
         page = self.paginate_queryset(queryset)
@@ -674,6 +706,26 @@ class ProposalViewSet(viewsets.ModelViewSet):
         # Fallback if pagination not configured
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='for-approval/count')
+    def for_approval_count(self, request):
+        """
+        Get count of proposals that need approval (waiting/pending status)
+        Lightweight endpoint that doesn't fetch images or details
+        """
+        user = request.user
+        
+        from django.db.models import Q
+        # Only count proposals with waiting or pending status
+        count = Proposal.objects.filter(
+            (Q(requester=user) | Q(provider=user)),
+            (Q(status='waiting') | Q(status='pending'))
+        ).count()
+        
+        return Response({
+            'count': count,
+            'waiting_count': count  # For backward compatibility
+        })
     
     def update(self, request, *args, **kwargs):
         """Handle update with proper error handling for balance validation"""

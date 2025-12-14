@@ -80,13 +80,17 @@ export function Header() {
     try {
       setLoadingProposals(true);
       
-      // Fetch sent proposals
-      const sentResponse = await api.get('/proposals/', { params: { sent: 'true' } });
+      // Fetch sent proposals (exclude images to reduce payload size - images not needed in header)
+      const sentResponse = await api.get('/proposals/', { 
+        params: { sent: 'true', exclude_images: 'true' } 
+      });
       const sentData = Array.isArray(sentResponse.data) ? sentResponse.data : (sentResponse.data?.results || []);
       setSentProposals(sentData);
       
-      // Fetch received proposals
-      const receivedResponse = await api.get('/proposals/', { params: { received: 'true' } });
+      // Fetch received proposals (exclude images to reduce payload size - images not needed in header)
+      const receivedResponse = await api.get('/proposals/', { 
+        params: { received: 'true', exclude_images: 'true' } 
+      });
       const receivedData = Array.isArray(receivedResponse.data) ? receivedResponse.data : (receivedResponse.data?.results || []);
       setReceivedProposals(receivedData);
     } catch (error) {

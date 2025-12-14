@@ -448,7 +448,10 @@ class ProposalSerializer(serializers.ModelSerializer):
         # Optimize: Access created_at directly (already in only())
         created_at = post.created_at.isoformat() if post.created_at else None
         
-        return {
+        # Check if images should be excluded (for performance optimization)
+        exclude_images = self.context.get('exclude_images', False)
+        
+        post_details = {
             'id': post.id,
             'title': post.title,
             'description': post.description,
@@ -462,11 +465,16 @@ class ProposalSerializer(serializers.ModelSerializer):
             'time': post.time,
             'latitude': post.latitude,
             'longitude': post.longitude,
-            'image': post.image,
             'posted_by_id': posted_by_id,
             'posted_by_username': posted_by_username,
             'created_at': created_at,
         }
+        
+        # Only include image if not excluded (saves significant bandwidth)
+        if not exclude_images:
+            post_details['image'] = post.image
+        
+        return post_details
     
     def get_has_reviewed(self, obj):
         """Check if current user has reviewed this proposal"""

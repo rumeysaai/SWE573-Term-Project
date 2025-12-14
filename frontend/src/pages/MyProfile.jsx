@@ -624,8 +624,9 @@ export default function MyProfile() {
     try {
       setLoadingHistory(true);
       // Use optimized endpoint that fetches both sent and received proposals in a single call
+      // exclude_images=true to reduce payload size - images not needed in history view
       const response = await api.get('/proposals/for-approval/', {
-        params: { page_size: 200 } // Get more proposals for history
+        params: { page_size: 200, exclude_images: 'true' } // Get more proposals for history
       });
 
       // Handle paginated response

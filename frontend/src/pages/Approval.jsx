@@ -49,8 +49,9 @@ export default function Approval() {
         setLoadingList(true);
         
         // Fetch all proposals for approval in a single API call (optimized endpoint with pagination)
+        // exclude_images=true to reduce payload size - images not needed in list view
         const response = await api.get('/proposals/for-approval/', {
-          params: { page: 1, page_size: 100 } // Get first 100 proposals (adjust as needed)
+          params: { page: 1, page_size: 100, exclude_images: 'true' } // Get first 100 proposals (adjust as needed)
         });
         
         // Handle paginated response
